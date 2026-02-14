@@ -15,13 +15,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.cursorai.remote.data.model.ConnectionState
+import com.cursorai.remote.data.model.*
 import com.cursorai.remote.service.VoiceState
 import com.cursorai.remote.ui.AppTab
 import com.cursorai.remote.ui.MainViewModel
-import com.cursorai.remote.ui.components.ConnectionStatusBar
-import com.cursorai.remote.ui.components.VoiceButton
-import com.cursorai.remote.ui.components.VoiceOverlay
+import com.cursorai.remote.ui.components.*
 import com.cursorai.remote.ui.theme.*
 
 @Composable
@@ -51,32 +49,53 @@ fun MainScreen(
     val hapticFeedback by viewModel.hapticFeedback.collectAsState()
     val fontSize by viewModel.fontSize.collectAsState()
 
+    // Tablet IDE state
+    val sidebarPanel by viewModel.sidebarPanel.collectAsState()
+    val sidebarVisible by viewModel.sidebarVisible.collectAsState()
+    val bottomPanelTab by viewModel.bottomPanelTab.collectAsState()
+    val bottomPanelVisible by viewModel.bottomPanelVisible.collectAsState()
+    val openTabs by viewModel.openTabs.collectAsState()
+    val activeTabIndex by viewModel.activeTabIndex.collectAsState()
+    val diagnostics by viewModel.diagnostics.collectAsState()
+    val gitBranch by viewModel.gitBranch.collectAsState()
+    val outputLines by viewModel.outputLines.collectAsState()
+
     val isTablet = widthSizeClass != WindowWidthSizeClass.Compact
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (isTablet) {
-            // Tablet layout: Rail navigation + split panels
-            TabletLayout(
-                currentTab = currentTab,
+            // ============================================
+            // TABLET: Full Cursor IDE layout
+            // ============================================
+            CursorIDELayout(
+                // Connection
                 connectionState = connectionState,
                 latency = latency,
-                voiceState = voiceState,
-                amplitude = amplitude,
+                // Editor
                 editorState = editorState,
+                openTabs = openTabs,
+                activeTabIndex = activeTabIndex,
+                // Panels
+                sidebarPanel = sidebarPanel,
+                sidebarVisible = sidebarVisible,
+                bottomPanelTab = bottomPanelTab,
+                bottomPanelVisible = bottomPanelVisible,
+                // Data
                 fileTree = fileTree,
                 terminalLines = terminalLines,
                 chatMessages = chatMessages,
-                connectionConfig = connectionConfig,
-                voiceLanguage = voiceLanguage,
-                autoConnect = autoConnect,
-                hapticFeedback = hapticFeedback,
-                fontSize = fontSize,
-                viewModel = viewModel,
-                onTabSelect = { viewModel.setCurrentTab(it) },
-                onVoiceToggle = { viewModel.toggleVoiceOverlay() }
+                diagnostics = diagnostics,
+                outputLines = outputLines,
+                gitBranch = gitBranch,
+                // Voice
+                voiceState = voiceState,
+                // Callbacks
+                viewModel = viewModel
             )
         } else {
-            // Phone layout: Bottom navigation
+            // ============================================
+            // PHONE: Bottom navigation layout
+            // ============================================
             PhoneLayout(
                 currentTab = currentTab,
                 connectionState = connectionState,
@@ -98,7 +117,7 @@ fun MainScreen(
             )
         }
 
-        // Voice overlay
+        // Voice overlay (both phone and tablet)
         VoiceOverlay(
             visible = showVoiceOverlay,
             voiceState = voiceState,
@@ -114,6 +133,166 @@ fun MainScreen(
     }
 }
 
+// ========================================================================
+// CURSOR IDE LAYOUT (Tablet / Landscape)
+// ========================================================================
+
+/**
+ * Full Cursor IDE replica layout:
+ * ┌──────────────────────────────────────────────────────┐
+ * │                    Title Bar                         │
+ * ├────┬─────────┬──────────────────────────────────────┤
+ * │    │         │  Tab Bar                              │
+ * │ A  │ Side    │  Breadcrumbs                          │
+ * │ c  │  bar    │  ┌──────────────────────┐┌──────┐   │
+ * │ t  │  Panel  │  │  Code Editor         ││ Mini │   │
+ * │ i  │         │  │                      ││ map  │   │
+ * │ v  │         │  │                      ││      │   │
+ * │ i  │         │  └──────────────────────┘└──────┘   │
+ * │ t  │         ├──────────────────────────────────────┤
+ * │ y  │         │  Bottom Panel (Terminal/Problems/..) │
+ * │    │         │                                       │
+ * ├────┴─────────┴──────────────────────────────────────┤
+ * │                    Status Bar                        │
+ * └──────────────────────────────────────────────────────┘
+ */
+@Composable
+fun CursorIDELayout(
+    connectionState: ConnectionState,
+    latency: Long,
+    editorState: EditorState,
+    openTabs: List<EditorTab>,
+    activeTabIndex: Int,
+    sidebarPanel: SidebarPanel,
+    sidebarVisible: Boolean,
+    bottomPanelTab: BottomPanelTab,
+    bottomPanelVisible: Boolean,
+    fileTree: List<FileNode>,
+    terminalLines: List<TerminalLine>,
+    chatMessages: List<ChatMessage>,
+    diagnostics: List<DiagnosticEntry>,
+    outputLines: List<String>,
+    gitBranch: String,
+    voiceState: VoiceState,
+    viewModel: MainViewModel
+) {
+    var showSettings by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Title Bar
+        CursorTitleBar(
+            projectName = "my-project",
+            activeFileName = editorState.fileName,
+            connectionState = connectionState,
+            onBack = { viewModel.webSocketManager.sendCommand("workbench.action.navigateBack") },
+            onForward = { viewModel.webSocketManager.sendCommand("workbench.action.navigateForward") },
+            onSearch = { viewModel.webSocketManager.sendCommand("workbench.action.quickOpen") },
+            onToggleSidebar = { viewModel.toggleSidebar() },
+            onTogglePanel = { viewModel.toggleBottomPanel() }
+        )
+
+        // Main body: ActivityBar | Sidebar | Editor+Panel
+        Row(modifier = Modifier.weight(1f)) {
+            // Activity Bar (far left, 48dp)
+            ActivityBar(
+                activePanel = sidebarPanel,
+                sidebarVisible = sidebarVisible,
+                voiceState = voiceState,
+                onPanelSelect = { viewModel.setSidebarPanel(it) },
+                onVoiceToggle = { viewModel.toggleVoiceOverlay() },
+                onSettingsClick = { showSettings = !showSettings }
+            )
+
+            if (showSettings) {
+                // Settings replaces everything when active
+                val connectionConfig by viewModel.connectionConfig.collectAsState()
+                val voiceLanguage by viewModel.voiceLanguage.collectAsState()
+                val autoConnect by viewModel.autoConnect.collectAsState()
+                val hapticFeedback by viewModel.hapticFeedback.collectAsState()
+                val fontSize by viewModel.fontSize.collectAsState()
+
+                SettingsScreen(
+                    connectionConfig = connectionConfig,
+                    connectionState = connectionState,
+                    voiceLanguage = voiceLanguage,
+                    autoConnect = autoConnect,
+                    hapticFeedback = hapticFeedback,
+                    fontSize = fontSize,
+                    onSaveConfig = { viewModel.saveSettings(it) },
+                    onConnect = { viewModel.connect() },
+                    onDisconnect = { viewModel.disconnect() },
+                    onSaveVoiceLanguage = { viewModel.saveVoiceLanguage(it) },
+                    onSaveAutoConnect = { viewModel.saveAutoConnect(it) },
+                    onSaveHapticFeedback = { viewModel.saveHapticFeedback(it) },
+                    onSaveFontSize = { viewModel.saveFontSize(it) },
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                // Sidebar (collapsible, 260dp)
+                CursorSidebar(
+                    visible = sidebarVisible,
+                    activePanel = sidebarPanel,
+                    fileTree = fileTree,
+                    chatMessages = chatMessages,
+                    voiceState = voiceState,
+                    onFileSelect = { viewModel.requestFile(it) },
+                    onRefresh = { viewModel.webSocketManager.requestFileTree() },
+                    onSendChat = { viewModel.sendAIMessage(it) },
+                    onVoiceInput = { viewModel.toggleVoiceOverlay() }
+                )
+
+                // Editor area + Bottom panel
+                Column(modifier = Modifier.weight(1f)) {
+                    // Editor pane
+                    CursorEditorPane(
+                        editorState = editorState,
+                        openTabs = openTabs,
+                        activeTabIndex = activeTabIndex,
+                        onTabSelect = { viewModel.setActiveTab(it) },
+                        onTabClose = { viewModel.closeTab(it) },
+                        onAction = { viewModel.webSocketManager.sendEditorAction(it) },
+                        modifier = if (bottomPanelVisible) Modifier.weight(0.6f) else Modifier.weight(1f)
+                    )
+
+                    // Bottom Panel
+                    BottomPanel(
+                        visible = bottomPanelVisible,
+                        activeTab = bottomPanelTab,
+                        terminalLines = terminalLines,
+                        chatMessages = chatMessages,
+                        diagnostics = diagnostics,
+                        outputLines = outputLines,
+                        voiceState = voiceState,
+                        onTabSelect = { viewModel.setBottomPanelTab(it) },
+                        onToggle = { viewModel.toggleBottomPanel() },
+                        onSendTerminal = { viewModel.sendTerminalCommand(it) },
+                        onSendChat = { viewModel.sendAIMessage(it) },
+                        onVoiceInput = { viewModel.toggleVoiceOverlay() },
+                        modifier = if (bottomPanelVisible) Modifier.weight(0.4f) else Modifier
+                    )
+                }
+            }
+        }
+
+        // Status Bar (bottom, 22dp)
+        CursorStatusBar(
+            connectionState = connectionState,
+            gitBranch = gitBranch,
+            errorCount = diagnostics.count { it.severity == DiagnosticSeverity.ERROR },
+            warningCount = diagnostics.count { it.severity == DiagnosticSeverity.WARNING },
+            line = editorState.cursorLine + 1,
+            column = editorState.cursorColumn + 1,
+            language = editorState.language.ifBlank { "Plain Text" },
+            latency = latency
+        )
+    }
+}
+
+
+// ========================================================================
+// PHONE LAYOUT (unchanged)
+// ========================================================================
+
 @Composable
 fun PhoneLayout(
     currentTab: AppTab,
@@ -121,11 +300,11 @@ fun PhoneLayout(
     latency: Long,
     voiceState: VoiceState,
     amplitude: Float,
-    editorState: com.cursorai.remote.data.model.EditorState,
-    fileTree: List<com.cursorai.remote.data.model.FileNode>,
-    terminalLines: List<com.cursorai.remote.data.model.TerminalLine>,
-    chatMessages: List<com.cursorai.remote.data.model.ChatMessage>,
-    connectionConfig: com.cursorai.remote.data.model.ConnectionConfig,
+    editorState: EditorState,
+    fileTree: List<FileNode>,
+    terminalLines: List<TerminalLine>,
+    chatMessages: List<ChatMessage>,
+    connectionConfig: ConnectionConfig,
     voiceLanguage: String,
     autoConnect: Boolean,
     hapticFeedback: Boolean,
@@ -209,151 +388,6 @@ fun PhoneLayout(
 }
 
 @Composable
-fun TabletLayout(
-    currentTab: AppTab,
-    connectionState: ConnectionState,
-    latency: Long,
-    voiceState: VoiceState,
-    amplitude: Float,
-    editorState: com.cursorai.remote.data.model.EditorState,
-    fileTree: List<com.cursorai.remote.data.model.FileNode>,
-    terminalLines: List<com.cursorai.remote.data.model.TerminalLine>,
-    chatMessages: List<com.cursorai.remote.data.model.ChatMessage>,
-    connectionConfig: com.cursorai.remote.data.model.ConnectionConfig,
-    voiceLanguage: String,
-    autoConnect: Boolean,
-    hapticFeedback: Boolean,
-    fontSize: Int,
-    viewModel: MainViewModel,
-    onTabSelect: (AppTab) -> Unit,
-    onVoiceToggle: () -> Unit
-) {
-    Row(modifier = Modifier.fillMaxSize()) {
-        // Navigation Rail
-        NavigationRailBar(
-            currentTab = currentTab,
-            voiceState = voiceState,
-            amplitude = amplitude,
-            onTabSelect = onTabSelect,
-            onVoiceToggle = onVoiceToggle
-        )
-
-        // Main content area
-        Column(modifier = Modifier.weight(1f)) {
-            // Connection status
-            ConnectionStatusBar(
-                connectionState = connectionState,
-                latency = latency,
-                onConnect = { viewModel.connect() },
-                onDisconnect = { viewModel.disconnect() }
-            )
-
-            when (currentTab) {
-                AppTab.EDITOR -> {
-                    // Tablet: File explorer + Editor side by side
-                    Row(modifier = Modifier.weight(1f)) {
-                        FileExplorerScreen(
-                            fileTree = fileTree,
-                            onFileSelect = { viewModel.requestFile(it) },
-                            onRefresh = { viewModel.webSocketManager.requestFileTree() },
-                            modifier = Modifier.width(260.dp)
-                        )
-
-                        // Divider
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .fillMaxHeight()
-                                .background(BorderDefault)
-                        )
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            EditorScreen(
-                                editorState = editorState,
-                                onAction = { viewModel.webSocketManager.sendEditorAction(it) },
-                                modifier = Modifier.weight(0.65f)
-                            )
-
-                            // Divider
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(BorderDefault)
-                            )
-
-                            // Terminal below editor
-                            TerminalScreen(
-                                terminalLines = terminalLines,
-                                voiceState = voiceState,
-                                onSendCommand = { viewModel.sendTerminalCommand(it) },
-                                onVoiceInput = onVoiceToggle,
-                                modifier = Modifier.weight(0.35f)
-                            )
-                        }
-                    }
-                }
-
-                AppTab.FILES -> FileExplorerScreen(
-                    fileTree = fileTree,
-                    onFileSelect = { viewModel.requestFile(it) },
-                    onRefresh = { viewModel.webSocketManager.requestFileTree() }
-                )
-
-                AppTab.TERMINAL -> TerminalScreen(
-                    terminalLines = terminalLines,
-                    voiceState = voiceState,
-                    onSendCommand = { viewModel.sendTerminalCommand(it) },
-                    onVoiceInput = onVoiceToggle
-                )
-
-                AppTab.AI_CHAT -> {
-                    // Tablet: Chat + Editor side by side
-                    Row(modifier = Modifier.weight(1f)) {
-                        AIChatScreen(
-                            messages = chatMessages,
-                            voiceState = voiceState,
-                            onSendMessage = { viewModel.sendAIMessage(it) },
-                            onVoiceInput = onVoiceToggle,
-                            modifier = Modifier.weight(0.45f)
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .fillMaxHeight()
-                                .background(BorderDefault)
-                        )
-
-                        EditorScreen(
-                            editorState = editorState,
-                            onAction = { viewModel.webSocketManager.sendEditorAction(it) },
-                            modifier = Modifier.weight(0.55f)
-                        )
-                    }
-                }
-
-                AppTab.SETTINGS -> SettingsScreen(
-                    connectionConfig = connectionConfig,
-                    connectionState = connectionState,
-                    voiceLanguage = voiceLanguage,
-                    autoConnect = autoConnect,
-                    hapticFeedback = hapticFeedback,
-                    fontSize = fontSize,
-                    onSaveConfig = { viewModel.saveSettings(it) },
-                    onConnect = { viewModel.connect() },
-                    onDisconnect = { viewModel.disconnect() },
-                    onSaveVoiceLanguage = { viewModel.saveVoiceLanguage(it) },
-                    onSaveAutoConnect = { viewModel.saveAutoConnect(it) },
-                    onSaveHapticFeedback = { viewModel.saveHapticFeedback(it) },
-                    onSaveFontSize = { viewModel.saveFontSize(it) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun BottomNavigationBar(
     currentTab: AppTab,
     voiceState: VoiceState,
@@ -374,7 +408,6 @@ fun BottomNavigationBar(
         shadowElevation = 8.dp
     ) {
         Column {
-            // Divider
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -391,7 +424,6 @@ fun BottomNavigationBar(
             ) {
                 tabs.forEachIndexed { index, (tab, icon, label) ->
                     if (index == 2) {
-                        // Voice button in the center
                         VoiceButton(
                             voiceState = voiceState,
                             amplitude = amplitude,
@@ -428,67 +460,6 @@ fun BottomNavigationBar(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun NavigationRailBar(
-    currentTab: AppTab,
-    voiceState: VoiceState,
-    amplitude: Float,
-    onTabSelect: (AppTab) -> Unit,
-    onVoiceToggle: () -> Unit
-) {
-    val tabs = listOf(
-        Triple(AppTab.EDITOR, Icons.Rounded.Code, "Editor"),
-        Triple(AppTab.FILES, Icons.Rounded.FolderOpen, "Files"),
-        Triple(AppTab.AI_CHAT, Icons.Rounded.AutoAwesome, "AI"),
-        Triple(AppTab.TERMINAL, Icons.Rounded.Terminal, "Terminal"),
-        Triple(AppTab.SETTINGS, Icons.Rounded.Settings, "Settings")
-    )
-
-    NavigationRail(
-        containerColor = CursorSurfaceVariant,
-        contentColor = TextPrimary,
-        header = {
-            Spacer(Modifier.height(12.dp))
-            // Voice button at top of rail
-            VoiceButton(
-                voiceState = voiceState,
-                amplitude = amplitude,
-                onClick = onVoiceToggle,
-                size = 44.dp
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-    ) {
-        tabs.forEach { (tab, icon, label) ->
-            NavigationRailItem(
-                selected = currentTab == tab,
-                onClick = { onTabSelect(tab) },
-                icon = {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = label,
-                        modifier = Modifier.size(22.dp)
-                    )
-                },
-                label = {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = if (currentTab == tab) FontWeight.SemiBold else FontWeight.Normal
-                    )
-                },
-                colors = NavigationRailItemDefaults.colors(
-                    selectedIconColor = CursorPrimary,
-                    selectedTextColor = CursorPrimary,
-                    unselectedIconColor = TextTertiary,
-                    unselectedTextColor = TextTertiary,
-                    indicatorColor = CursorPrimary.copy(alpha = 0.15f)
-                )
-            )
         }
     }
 }

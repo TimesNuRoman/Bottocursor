@@ -64,6 +64,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _showVoiceOverlay = MutableStateFlow(false)
     val showVoiceOverlay: StateFlow<Boolean> = _showVoiceOverlay
 
+    // Tablet IDE state
+    private val _sidebarPanel = MutableStateFlow(SidebarPanel.EXPLORER)
+    val sidebarPanel: StateFlow<SidebarPanel> = _sidebarPanel
+
+    private val _sidebarVisible = MutableStateFlow(true)
+    val sidebarVisible: StateFlow<Boolean> = _sidebarVisible
+
+    private val _bottomPanelTab = MutableStateFlow(BottomPanelTab.TERMINAL)
+    val bottomPanelTab: StateFlow<BottomPanelTab> = _bottomPanelTab
+
+    private val _bottomPanelVisible = MutableStateFlow(true)
+    val bottomPanelVisible: StateFlow<Boolean> = _bottomPanelVisible
+
+    private val _openTabs = MutableStateFlow<List<EditorTab>>(emptyList())
+    val openTabs: StateFlow<List<EditorTab>> = _openTabs
+
+    private val _activeTabIndex = MutableStateFlow(0)
+    val activeTabIndex: StateFlow<Int> = _activeTabIndex
+
+    private val _diagnostics = MutableStateFlow<List<DiagnosticEntry>>(emptyList())
+    val diagnostics: StateFlow<List<DiagnosticEntry>> = _diagnostics
+
+    private val _gitBranch = MutableStateFlow("main")
+    val gitBranch: StateFlow<String> = _gitBranch
+
+    private val _outputLines = MutableStateFlow<List<String>>(emptyList())
+    val outputLines: StateFlow<List<String>> = _outputLines
+
     // Quick actions for voice commands
     val quickActions = listOf(
         QuickAction("terminal", "Open Terminal", "workbench.action.terminal.toggleTerminal", "Toggle integrated terminal"),
@@ -113,17 +141,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             FileNode("src", "src", true, listOf(
                 FileNode("main.ts", "src/main.ts", false, extension = "ts"),
                 FileNode("app.tsx", "src/app.tsx", false, extension = "tsx"),
+                FileNode("index.css", "src/index.css", false, extension = "css"),
                 FileNode("components", "src/components", true, listOf(
                     FileNode("Header.tsx", "src/components/Header.tsx", false, extension = "tsx"),
                     FileNode("Sidebar.tsx", "src/components/Sidebar.tsx", false, extension = "tsx"),
+                    FileNode("Footer.tsx", "src/components/Footer.tsx", false, extension = "tsx"),
+                )),
+                FileNode("hooks", "src/hooks", true, listOf(
+                    FileNode("useAuth.ts", "src/hooks/useAuth.ts", false, extension = "ts"),
+                    FileNode("useTheme.ts", "src/hooks/useTheme.ts", false, extension = "ts"),
                 )),
                 FileNode("utils", "src/utils", true, listOf(
                     FileNode("api.ts", "src/utils/api.ts", false, extension = "ts"),
                     FileNode("helpers.ts", "src/utils/helpers.ts", false, extension = "ts"),
                 )),
+                FileNode("types", "src/types", true, listOf(
+                    FileNode("index.d.ts", "src/types/index.d.ts", false, extension = "ts"),
+                )),
             )),
+            FileNode("public", "public", true, listOf(
+                FileNode("favicon.ico", "public/favicon.ico", false, extension = "ico"),
+                FileNode("index.html", "public/index.html", false, extension = "html"),
+            )),
+            FileNode(".gitignore", ".gitignore", false, extension = "gitignore"),
             FileNode("package.json", "package.json", false, extension = "json"),
             FileNode("tsconfig.json", "tsconfig.json", false, extension = "json"),
+            FileNode("vite.config.ts", "vite.config.ts", false, extension = "ts"),
             FileNode("README.md", "README.md", false, extension = "md"),
         )
 
@@ -167,13 +210,36 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
             cursorColumn = 4
         )
 
+        // Open editor tabs
+        _openTabs.value = listOf(
+            EditorTab("src/app.tsx", "app.tsx", "typescriptreact", isModified = true),
+            EditorTab("src/main.ts", "main.ts", "typescript"),
+            EditorTab("src/components/Header.tsx", "Header.tsx", "typescriptreact"),
+            EditorTab("package.json", "package.json", "json"),
+        )
+        _activeTabIndex.value = 0
+
+        // Demo diagnostics
+        _diagnostics.value = listOf(
+            DiagnosticEntry("Property 'theme' is missing in type '{}'", "src/app.tsx", 19, DiagnosticSeverity.ERROR),
+            DiagnosticEntry("'count' is declared but never read", "src/app.tsx", 11, DiagnosticSeverity.WARNING),
+            DiagnosticEntry("Unexpected any. Specify a different type", "src/utils/api.ts", 5, DiagnosticSeverity.WARNING),
+        )
+
         _terminalLines.value = listOf(
             TerminalLine("$ npm run dev", isCommand = true),
+            TerminalLine(""),
             TerminalLine("  VITE v5.0.12  ready in 245 ms"),
             TerminalLine(""),
             TerminalLine("  ➜  Local:   http://localhost:5173/"),
             TerminalLine("  ➜  Network: http://192.168.1.100:5173/"),
             TerminalLine("  ➜  press h + enter to show help"),
+        )
+
+        _outputLines.value = listOf(
+            "[Info  - 12:00:01] TypeScript Server started",
+            "[Info  - 12:00:02] Loading project: /workspace/tsconfig.json",
+            "[Info  - 12:00:03] Files: 47, Symbols: 12840",
         )
     }
 
@@ -420,6 +486,50 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
 
     fun executeQuickAction(action: QuickAction) {
         webSocketManager.sendCommand(action.command)
+    }
+
+    // Tablet IDE panel management
+    fun setSidebarPanel(panel: SidebarPanel) {
+        if (_sidebarPanel.value == panel && _sidebarVisible.value) {
+            _sidebarVisible.value = false
+        } else {
+            _sidebarPanel.value = panel
+            _sidebarVisible.value = true
+        }
+    }
+
+    fun toggleSidebar() {
+        _sidebarVisible.value = !_sidebarVisible.value
+    }
+
+    fun setBottomPanelTab(tab: BottomPanelTab) {
+        if (_bottomPanelTab.value == tab && _bottomPanelVisible.value) {
+            _bottomPanelVisible.value = false
+        } else {
+            _bottomPanelTab.value = tab
+            _bottomPanelVisible.value = true
+        }
+    }
+
+    fun toggleBottomPanel() {
+        _bottomPanelVisible.value = !_bottomPanelVisible.value
+    }
+
+    fun setActiveTab(index: Int) {
+        if (index in _openTabs.value.indices) {
+            _activeTabIndex.value = index
+        }
+    }
+
+    fun closeTab(index: Int) {
+        val tabs = _openTabs.value.toMutableList()
+        if (tabs.size > 1 && index in tabs.indices) {
+            tabs.removeAt(index)
+            _openTabs.value = tabs
+            if (_activeTabIndex.value >= tabs.size) {
+                _activeTabIndex.value = tabs.size - 1
+            }
+        }
     }
 
     override fun onCleared() {

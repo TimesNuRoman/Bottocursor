@@ -61,3 +61,48 @@ val TerminalText = Color(0xFFC9D1D9)
 val TerminalPrompt = Color(0xFF10B981)
 val TerminalCommand = Color(0xFFF0F6FC)
 val TerminalError = Color(0xFFFF7B72)
+
+// Cursor IDE specific colors (pixel-perfect match)
+val ActivityBarBg = Color(0xFF181818)          // Activity bar background
+val ActivityBarFg = Color(0xFFB0B0B0)          // Activity bar icons inactive
+val ActivityBarActive = Color(0xFFFFFFFF)       // Activity bar icon active
+val ActivityBarIndicator = Color(0xFF7C3AED)    // Left indicator strip
+
+val TitleBarBg = Color(0xFF1F1F1F)             // Title bar
+val TitleBarFg = Color(0xFFCCCCCC)
+
+val SideBarBg = Color(0xFF181818)              // Sidebar background
+val SideBarSectionHeader = Color(0xFF1F1F1F)   // Section headers
+val SideBarFg = Color(0xFFCCCCCC)
+
+val EditorGroupHeader = Color(0xFF1F1F1F)      // Tab bar background
+val TabActiveBg = Color(0xFF1E1E1E)            // Active tab
+val TabInactiveBg = Color(0xFF181818)           // Inactive tab
+val TabActiveFg = Color(0xFFFFFFFF)
+val TabInactiveFg = Color(0xFF8B8B8B)
+val TabActiveBorder = Color(0xFF7C3AED)        // Active tab top border
+
+val StatusBarBg = Color(0xFF181818)            // Status bar
+val StatusBarFg = Color(0xFFB0B0B0)
+val StatusBarRemoteBg = Color(0xFF7C3AED)      // Remote indicator
+val StatusBarItemHover = Color(0xFF2A2A2A)
+
+val PanelBg = Color(0xFF1E1E1E)               // Bottom panel
+val PanelHeaderBg = Color(0xFF181818)          // Panel header / tab bar
+val PanelBorder = Color(0xFF2B2B2B)            // Panel top border
+val PanelTabActive = Color(0xFFFFFFFF)
+val PanelTabInactive = Color(0xFF8B8B8B)
+val PanelTabIndicator = Color(0xFF7C3AED)
+
+val BreadcrumbFg = Color(0xFF8B8B8B)
+val BreadcrumbActiveFg = Color(0xFFCCCCCC)
+val BreadcrumbSeparator = Color(0xFF5A5A5A)
+
+val MinimapBg = Color(0xFF1E1E1E)
+val MinimapSlider = Color(0x20FFFFFF)
+
+val ScrollbarBg = Color(0x00000000)
+val ScrollbarThumb = Color(0x40FFFFFF)
+
+val ListHoverBg = Color(0xFF2A2D2E)
+val ListActiveSelectionBg = Color(0xFF094771)

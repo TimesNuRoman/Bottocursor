@@ -95,6 +95,37 @@ data class EditorState(
     val isModified: Boolean = false
 )
 
+// Editor tab (open file)
+data class EditorTab(
+    val filePath: String,
+    val fileName: String,
+    val language: String = "",
+    val isModified: Boolean = false,
+    val isPinned: Boolean = false
+)
+
+// Sidebar panel type (Activity Bar sections)
+enum class SidebarPanel {
+    EXPLORER, SEARCH, GIT, DEBUG, EXTENSIONS, AI_CHAT, NONE
+}
+
+// Bottom panel tab
+enum class BottomPanelTab {
+    PROBLEMS, OUTPUT, TERMINAL, AI_CHAT, DEBUG_CONSOLE
+}
+
+// Problem/diagnostic entry
+data class DiagnosticEntry(
+    val message: String,
+    val file: String,
+    val line: Int,
+    val severity: DiagnosticSeverity = DiagnosticSeverity.ERROR
+)
+
+enum class DiagnosticSeverity {
+    ERROR, WARNING, INFO, HINT
+}
+
 // Quick action for voice commands
 data class QuickAction(
     val icon: String,
