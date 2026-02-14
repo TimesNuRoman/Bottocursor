@@ -181,6 +181,26 @@ class WebSocketManager {
         )
     }
 
+    fun sendBuildCommand(command: String) {
+        send(
+            WsMessage(
+                type = MessageType.BUILD_COMMAND,
+                payload = command,
+                id = UUID.randomUUID().toString()
+            )
+        )
+    }
+
+    fun sendDevServerCommand(command: String) {
+        send(
+            WsMessage(
+                type = MessageType.DEV_SERVER,
+                payload = command,
+                id = UUID.randomUUID().toString()
+            )
+        )
+    }
+
     fun disconnect() {
         webSocket?.close(1000, "User disconnected")
         webSocket = null

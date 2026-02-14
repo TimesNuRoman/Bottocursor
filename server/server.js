@@ -77,8 +77,11 @@ log(`Cursor CLI: ${CURSOR_CLI}`);
 log(`Workspace: ${WORKSPACE}`);
 if (AUTH_TOKEN) log('Authentication: enabled');
 
-// Track active terminals
+// Track active terminals and processes
 const terminals = new Map();
+const buildProcesses = new Map();
+let devServerProcess = null;
+let devServerUrl = '';
 
 wss.on('connection', (ws, req) => {
     const clientIP = req.socket.remoteAddress;
@@ -131,6 +134,14 @@ function handleMessage(ws, message) {
 
         case 'editor_action':
             handleEditorAction(ws, message);
+            break;
+
+        case 'build_command':
+            handleBuildCommand(ws, message);
+            break;
+
+        case 'dev_server':
+            handleDevServer(ws, message);
             break;
 
         case 'status':
@@ -414,6 +425,223 @@ function simulateKeybinding(command) {
     }
 }
 
+/**
+ * Handle build commands (npm run build, npm test, etc.)
+ */
+function handleBuildCommand(ws, message) {
+    const command = message.payload;
+
+    if (command === 'STOP') {
+        // Kill active build processes
+        buildProcesses.forEach((proc, id) => {
+            try { proc.kill('SIGTERM'); } catch (_) {}
+        });
+        buildProcesses.clear();
+        ws.send(JSON.stringify({ type: 'build_status', payload: 'idle', id: message.id, timestamp: Date.now() }));
+        return;
+    }
+
+    log(`Build: ${command}`);
+    ws.send(JSON.stringify({ type: 'build_status', payload: 'building', id: message.id, timestamp: Date.now() }));
+    ws.send(JSON.stringify({ type: 'build_output', payload: `$ ${command}`, id: message.id, timestamp: Date.now() }));
+
+    const child = spawn('sh', ['-c', command], {
+        cwd: WORKSPACE,
+        env: { ...process.env, FORCE_COLOR: '0' },
+        timeout: 300000 // 5 min
+    });
+
+    buildProcesses.set(message.id, child);
+
+    child.stdout.on('data', (data) => {
+        const text = data.toString();
+        text.split('\n').forEach(line => {
+            if (line.trim()) {
+                ws.send(JSON.stringify({ type: 'build_output', payload: line, id: message.id, timestamp: Date.now() }));
+            }
+        });
+    });
+
+    child.stderr.on('data', (data) => {
+        const text = data.toString();
+        text.split('\n').forEach(line => {
+            if (line.trim()) {
+                ws.send(JSON.stringify({ type: 'build_output', payload: line, id: message.id, timestamp: Date.now() }));
+            }
+        });
+    });
+
+    child.on('close', (code) => {
+        buildProcesses.delete(message.id);
+        const status = code === 0 ? 'success' : 'failed';
+        ws.send(JSON.stringify({ type: 'build_output', payload: `\nProcess exited with code ${code}`, id: message.id, timestamp: Date.now() }));
+        ws.send(JSON.stringify({ type: 'build_status', payload: status, id: message.id, timestamp: Date.now() }));
+    });
+}
+
+/**
+ * Handle dev server start/stop
+ * Detects URLs from stdout (Vite, Next.js, CRA, etc.)
+ */
+function handleDevServer(ws, message) {
+    const command = message.payload;
+
+    if (command === 'STOP') {
+        if (devServerProcess) {
+            log('Stopping dev server...');
+            try {
+                // Kill process group
+                process.kill(-devServerProcess.pid, 'SIGTERM');
+            } catch (_) {
+                try { devServerProcess.kill('SIGTERM'); } catch (_) {}
+            }
+            devServerProcess = null;
+            devServerUrl = '';
+            ws.send(JSON.stringify({
+                type: 'dev_server_status',
+                payload: JSON.stringify({ isRunning: false, url: '', port: 0, framework: '', pid: 0 }),
+                id: message.id, timestamp: Date.now()
+            }));
+        }
+        return;
+    }
+
+    // Stop existing dev server if running
+    if (devServerProcess) {
+        try { process.kill(-devServerProcess.pid, 'SIGTERM'); } catch (_) {
+            try { devServerProcess.kill('SIGTERM'); } catch (_) {}
+        }
+    }
+
+    log(`Starting dev server: ${command}`);
+    ws.send(JSON.stringify({ type: 'build_status', payload: 'building', id: message.id, timestamp: Date.now() }));
+    ws.send(JSON.stringify({ type: 'build_output', payload: `$ ${command}`, id: message.id, timestamp: Date.now() }));
+
+    devServerProcess = spawn('sh', ['-c', command], {
+        cwd: WORKSPACE,
+        env: { ...process.env, FORCE_COLOR: '0', BROWSER: 'none' },
+        detached: true
+    });
+
+    const detectUrl = (text) => {
+        // Detect dev server URLs from various frameworks
+        const urlPatterns = [
+            /(?:Local|Network|URL):\s+(https?:\/\/[^\s]+)/i,
+            /(?:listening|running|started)\s+(?:on|at)\s+(https?:\/\/[^\s]+)/i,
+            /(?:http:\/\/localhost:\d+)/,
+            /(?:http:\/\/127\.0\.0\.1:\d+)/,
+            /(?:http:\/\/0\.0\.0\.0:\d+)/,
+        ];
+
+        for (const pattern of urlPatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                let url = match[1] || match[0];
+                // Replace 0.0.0.0 / 127.0.0.1 with the server's host for remote access
+                url = url.replace('0.0.0.0', getLocalIP()).replace('127.0.0.1', getLocalIP()).replace('localhost', getLocalIP());
+                return url;
+            }
+        }
+        return null;
+    };
+
+    devServerProcess.stdout.on('data', (data) => {
+        const text = data.toString();
+        text.split('\n').forEach(line => {
+            if (line.trim()) {
+                ws.send(JSON.stringify({ type: 'build_output', payload: line, id: message.id, timestamp: Date.now() }));
+                ws.send(JSON.stringify({ type: 'terminal_output', payload: line, id: message.id, timestamp: Date.now() }));
+
+                const url = detectUrl(line);
+                if (url && !devServerUrl) {
+                    devServerUrl = url;
+                    log(`Dev server URL detected: ${url}`);
+                    ws.send(JSON.stringify({ type: 'preview_url', payload: url, id: message.id, timestamp: Date.now() }));
+                    ws.send(JSON.stringify({ type: 'build_status', payload: 'success', id: message.id, timestamp: Date.now() }));
+                    ws.send(JSON.stringify({
+                        type: 'dev_server_status',
+                        payload: JSON.stringify({
+                            isRunning: true,
+                            url: url,
+                            port: parseInt(url.match(/:(\d+)/)?.[1] || '0'),
+                            framework: detectFramework(),
+                            pid: devServerProcess.pid
+                        }),
+                        id: message.id, timestamp: Date.now()
+                    }));
+                }
+            }
+        });
+    });
+
+    devServerProcess.stderr.on('data', (data) => {
+        const text = data.toString();
+        text.split('\n').forEach(line => {
+            if (line.trim()) {
+                ws.send(JSON.stringify({ type: 'build_output', payload: line, id: message.id, timestamp: Date.now() }));
+
+                const url = detectUrl(line);
+                if (url && !devServerUrl) {
+                    devServerUrl = url;
+                    log(`Dev server URL detected: ${url}`);
+                    ws.send(JSON.stringify({ type: 'preview_url', payload: url, id: message.id, timestamp: Date.now() }));
+                    ws.send(JSON.stringify({ type: 'build_status', payload: 'success', id: message.id, timestamp: Date.now() }));
+                }
+            }
+        });
+    });
+
+    devServerProcess.on('close', (code) => {
+        log(`Dev server exited with code ${code}`);
+        devServerProcess = null;
+        devServerUrl = '';
+        ws.send(JSON.stringify({
+            type: 'dev_server_status',
+            payload: JSON.stringify({ isRunning: false, url: '', port: 0, framework: '', pid: 0 }),
+            id: message.id, timestamp: Date.now()
+        }));
+        if (code !== 0 && code !== null) {
+            ws.send(JSON.stringify({ type: 'build_status', payload: 'failed', id: message.id, timestamp: Date.now() }));
+        }
+    });
+}
+
+/**
+ * Detect project framework from package.json
+ */
+function detectFramework() {
+    try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(WORKSPACE, 'package.json'), 'utf-8'));
+        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+        if (deps['next']) return 'Next.js';
+        if (deps['nuxt']) return 'Nuxt';
+        if (deps['vite']) return 'Vite';
+        if (deps['react-scripts']) return 'Create React App';
+        if (deps['@angular/core']) return 'Angular';
+        if (deps['svelte']) return 'Svelte';
+        if (deps['vue']) return 'Vue';
+        if (deps['gatsby']) return 'Gatsby';
+        if (deps['astro']) return 'Astro';
+        if (deps['remix']) return 'Remix';
+    } catch (_) {}
+    return 'Unknown';
+}
+
+/**
+ * Get local IP for dev server URL replacement
+ */
+function getLocalIP() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return 'localhost';
+}
+
 function sendResponse(ws, id, payload) {
     ws.send(JSON.stringify({
         type: 'response',
@@ -452,16 +680,25 @@ function getLanguageId(ext) {
 }
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+function cleanup() {
     log('Shutting down...');
-    wss.close(() => {
-        process.exit(0);
-    });
-});
 
-process.on('SIGTERM', () => {
-    log('Shutting down...');
+    // Kill dev server
+    if (devServerProcess) {
+        try { process.kill(-devServerProcess.pid, 'SIGTERM'); } catch (_) {
+            try { devServerProcess.kill('SIGTERM'); } catch (_) {}
+        }
+    }
+
+    // Kill build processes
+    buildProcesses.forEach((proc) => {
+        try { proc.kill('SIGTERM'); } catch (_) {}
+    });
+
     wss.close(() => {
         process.exit(0);
     });
-});
+}
+
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);

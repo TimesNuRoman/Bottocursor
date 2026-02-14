@@ -254,7 +254,14 @@ fun CursorIDELayout(
                         modifier = if (bottomPanelVisible) Modifier.weight(0.6f) else Modifier.weight(1f)
                     )
 
-                    // Bottom Panel
+                    // Bottom Panel (with Preview & Build)
+                    val previewUrl by viewModel.previewUrl.collectAsState()
+                    val isDevServerRunning by viewModel.isDevServerRunning.collectAsState()
+                    val consoleLogs by viewModel.consoleLogs.collectAsState()
+                    val selectedDevice by viewModel.selectedDevice.collectAsState()
+                    val buildState by viewModel.buildState.collectAsState()
+                    val buildOutput by viewModel.buildOutput.collectAsState()
+
                     BottomPanel(
                         visible = bottomPanelVisible,
                         activeTab = bottomPanelTab,
@@ -263,11 +270,29 @@ fun CursorIDELayout(
                         diagnostics = diagnostics,
                         outputLines = outputLines,
                         voiceState = voiceState,
+                        // Preview & Build
+                        previewUrl = previewUrl,
+                        isDevServerRunning = isDevServerRunning,
+                        consoleLogs = consoleLogs,
+                        selectedDevice = selectedDevice,
+                        buildState = buildState,
+                        buildOutput = buildOutput,
+                        buildTasks = viewModel.buildTasks,
                         onTabSelect = { viewModel.setBottomPanelTab(it) },
                         onToggle = { viewModel.toggleBottomPanel() },
                         onSendTerminal = { viewModel.sendTerminalCommand(it) },
                         onSendChat = { viewModel.sendAIMessage(it) },
                         onVoiceInput = { viewModel.toggleVoiceOverlay() },
+                        // Preview & Build callbacks
+                        onPreviewUrlChange = { viewModel.setPreviewUrl(it) },
+                        onPreviewRefresh = { },
+                        onDeviceChange = { viewModel.setPreviewDevice(it) },
+                        onStartDevServer = { viewModel.startDevServer() },
+                        onStopDevServer = { viewModel.stopDevServer() },
+                        onConsoleClear = { viewModel.clearConsoleLogs() },
+                        onRunBuildTask = { viewModel.runBuildTask(it) },
+                        onStopBuild = { viewModel.stopBuild() },
+                        onClearBuildOutput = { viewModel.clearBuildOutput() },
                         modifier = if (bottomPanelVisible) Modifier.weight(0.4f) else Modifier
                     )
                 }

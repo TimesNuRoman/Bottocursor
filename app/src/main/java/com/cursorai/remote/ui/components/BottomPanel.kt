@@ -32,7 +32,7 @@ import com.cursorai.remote.service.VoiceState
 import com.cursorai.remote.ui.theme.*
 
 /**
- * Bottom Panel — Terminal/Problems/Output tabs, just like Cursor IDE.
+ * Bottom Panel — Terminal/Problems/Output/Preview/Build tabs, just like Cursor IDE.
  */
 @Composable
 fun BottomPanel(
@@ -43,11 +43,29 @@ fun BottomPanel(
     diagnostics: List<DiagnosticEntry>,
     outputLines: List<String>,
     voiceState: VoiceState,
+    // Preview & Build props
+    previewUrl: String = "",
+    isDevServerRunning: Boolean = false,
+    consoleLogs: List<com.cursorai.remote.data.model.ConsoleLogEntry> = emptyList(),
+    selectedDevice: com.cursorai.remote.data.model.PreviewDevice = com.cursorai.remote.data.model.PreviewDevice.RESPONSIVE,
+    buildState: com.cursorai.remote.data.model.BuildState = com.cursorai.remote.data.model.BuildState.IDLE,
+    buildOutput: List<String> = emptyList(),
+    buildTasks: List<com.cursorai.remote.data.model.BuildTask> = emptyList(),
     onTabSelect: (BottomPanelTab) -> Unit,
     onToggle: () -> Unit,
     onSendTerminal: (String) -> Unit,
     onSendChat: (String) -> Unit,
     onVoiceInput: () -> Unit,
+    // Preview & Build callbacks
+    onPreviewUrlChange: (String) -> Unit = {},
+    onPreviewRefresh: () -> Unit = {},
+    onDeviceChange: (com.cursorai.remote.data.model.PreviewDevice) -> Unit = {},
+    onStartDevServer: () -> Unit = {},
+    onStopDevServer: () -> Unit = {},
+    onConsoleClear: () -> Unit = {},
+    onRunBuildTask: (com.cursorai.remote.data.model.BuildTask) -> Unit = {},
+    onStopBuild: () -> Unit = {},
+    onClearBuildOutput: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -102,6 +120,27 @@ fun BottomPanel(
                     BottomPanelTab.DEBUG_CONSOLE -> PanelOutput(
                         lines = listOf("Debug console ready.")
                     )
+                    BottomPanelTab.PREVIEW -> WebPreviewPanel(
+                        url = previewUrl,
+                        isDevServerRunning = isDevServerRunning,
+                        consoleLogs = consoleLogs,
+                        selectedDevice = selectedDevice,
+                        onUrlChange = onPreviewUrlChange,
+                        onRefresh = onPreviewRefresh,
+                        onDeviceChange = onDeviceChange,
+                        onStartDevServer = onStartDevServer,
+                        onStopDevServer = onStopDevServer,
+                        onConsoleClear = onConsoleClear
+                    )
+                    BottomPanelTab.BUILD -> BuildPanel(
+                        buildState = buildState,
+                        buildOutput = buildOutput,
+                        buildTasks = buildTasks,
+                        devServerRunning = isDevServerRunning,
+                        onRunTask = onRunBuildTask,
+                        onStopBuild = onStopBuild,
+                        onClearOutput = onClearBuildOutput
+                    )
                 }
             }
         }
@@ -129,9 +168,13 @@ fun PanelTabHeader(
             badge = if (diagnosticCount > 0) "$diagnosticCount" else null)
         PanelTab("OUTPUT", BottomPanelTab.OUTPUT, activeTab, onTabSelect)
         PanelTab("TERMINAL", BottomPanelTab.TERMINAL, activeTab, onTabSelect)
+        PanelTab("PREVIEW", BottomPanelTab.PREVIEW, activeTab, onTabSelect,
+            tintActive = CursorSecondary)
+        PanelTab("BUILD", BottomPanelTab.BUILD, activeTab, onTabSelect,
+            tintActive = StatusSuccess)
         PanelTab("AI CHAT", BottomPanelTab.AI_CHAT, activeTab, onTabSelect,
             tintActive = CursorPrimary)
-        PanelTab("DEBUG CONSOLE", BottomPanelTab.DEBUG_CONSOLE, activeTab, onTabSelect)
+        PanelTab("DEBUG", BottomPanelTab.DEBUG_CONSOLE, activeTab, onTabSelect)
 
         Spacer(Modifier.weight(1f))
 

@@ -92,6 +92,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _outputLines = MutableStateFlow<List<String>>(emptyList())
     val outputLines: StateFlow<List<String>> = _outputLines
 
+    // Preview & Build state
+    private val _previewUrl = MutableStateFlow("")
+    val previewUrl: StateFlow<String> = _previewUrl
+
+    private val _isDevServerRunning = MutableStateFlow(false)
+    val isDevServerRunning: StateFlow<Boolean> = _isDevServerRunning
+
+    private val _consoleLogs = MutableStateFlow<List<ConsoleLogEntry>>(emptyList())
+    val consoleLogs: StateFlow<List<ConsoleLogEntry>> = _consoleLogs
+
+    private val _selectedDevice = MutableStateFlow(PreviewDevice.RESPONSIVE)
+    val selectedDevice: StateFlow<PreviewDevice> = _selectedDevice
+
+    private val _buildState = MutableStateFlow(BuildState.IDLE)
+    val buildState: StateFlow<BuildState> = _buildState
+
+    private val _buildOutput = MutableStateFlow<List<String>>(emptyList())
+    val buildOutput: StateFlow<List<String>> = _buildOutput
+
+    val buildTasks = listOf(
+        BuildTask("dev", "npm run dev", "Start development server", isDevServer = true),
+        BuildTask("build", "npm run build", "Production build"),
+        BuildTask("test", "npm test", "Run tests"),
+        BuildTask("lint", "npm run lint", "Run linter"),
+        BuildTask("preview", "npm run preview", "Preview production build", isDevServer = true),
+        BuildTask("install", "npm install", "Install dependencies"),
+        BuildTask("clean", "rm -rf node_modules/.cache dist", "Clean build cache"),
+        BuildTask("typecheck", "npx tsc --noEmit", "TypeScript type check"),
+    )
+
     // Quick actions for voice commands
     val quickActions = listOf(
         QuickAction("terminal", "Open Terminal", "workbench.action.terminal.toggleTerminal", "Toggle integrated terminal"),
@@ -290,6 +320,38 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
                 // Handle status/pong
             }
 
+            MessageType.BUILD_OUTPUT -> {
+                val lines = _buildOutput.value.toMutableList()
+                lines.add(message.payload)
+                _buildOutput.value = lines
+            }
+
+            MessageType.BUILD_STATUS -> {
+                when (message.payload) {
+                    "building" -> _buildState.value = BuildState.BUILDING
+                    "success" -> _buildState.value = BuildState.SUCCESS
+                    "failed" -> _buildState.value = BuildState.FAILED
+                    "idle" -> _buildState.value = BuildState.IDLE
+                }
+            }
+
+            MessageType.DEV_SERVER_STATUS -> {
+                try {
+                    val state = gson.fromJson(message.payload, DevServerState::class.java)
+                    _isDevServerRunning.value = state.isRunning
+                    if (state.url.isNotBlank()) {
+                        _previewUrl.value = state.url
+                    }
+                } catch (_: Exception) {
+                    _isDevServerRunning.value = message.payload == "running"
+                }
+            }
+
+            MessageType.PREVIEW_URL -> {
+                _previewUrl.value = message.payload
+                _isDevServerRunning.value = true
+            }
+
             MessageType.ERROR -> {
                 val lines = _terminalLines.value.toMutableList()
                 lines.add(TerminalLine("Error: ${message.payload}"))
@@ -373,6 +435,34 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
                 "cursor.explain"
             lowerText.contains("generate") || lowerText.contains("генерируй") || lowerText.contains("сгенерируй") ->
                 "cursor.generate"
+
+            // Build & Preview
+            lowerText.contains("preview") || lowerText.contains("превью") || lowerText.contains("предпросмотр") -> {
+                openPreview()
+                null
+            }
+            lowerText.contains("build") || lowerText.contains("билд") || lowerText.contains("собери") ||
+                    lowerText.contains("сборка") -> {
+                openBuild()
+                "workbench.action.tasks.build"
+            }
+            lowerText.contains("start server") || lowerText.contains("dev server") ||
+                    lowerText.contains("запусти сервер") || lowerText.contains("дев сервер") -> {
+                startDevServer()
+                null
+            }
+            lowerText.contains("stop server") || lowerText.contains("останови сервер") -> {
+                stopDevServer()
+                null
+            }
+            lowerText.contains("test") || lowerText.contains("тест") -> {
+                runBuildTask(buildTasks.first { it.name == "test" })
+                null
+            }
+            lowerText.contains("lint") || lowerText.contains("линт") -> {
+                runBuildTask(buildTasks.first { it.name == "lint" })
+                null
+            }
 
             // Command palette
             lowerText.contains("command") || lowerText.contains("palette") || lowerText.contains("команд") ->
@@ -530,6 +620,81 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
                 _activeTabIndex.value = tabs.size - 1
             }
         }
+    }
+
+    // ========== Build & Preview ==========
+
+    fun runBuildTask(task: BuildTask) {
+        _buildOutput.value = listOf("$ ${task.command}")
+        _buildState.value = BuildState.BUILDING
+
+        if (task.isDevServer) {
+            webSocketManager.send(WsMessage(
+                type = MessageType.DEV_SERVER,
+                payload = task.command,
+                id = java.util.UUID.randomUUID().toString()
+            ))
+        } else {
+            webSocketManager.send(WsMessage(
+                type = MessageType.BUILD_COMMAND,
+                payload = task.command,
+                id = java.util.UUID.randomUUID().toString()
+            ))
+        }
+    }
+
+    fun stopBuild() {
+        webSocketManager.send(WsMessage(
+            type = MessageType.BUILD_COMMAND,
+            payload = "STOP",
+            id = java.util.UUID.randomUUID().toString()
+        ))
+        _buildState.value = BuildState.IDLE
+    }
+
+    fun startDevServer() {
+        val devTask = buildTasks.first { it.isDevServer }
+        runBuildTask(devTask)
+        // Switch to preview tab
+        _bottomPanelTab.value = BottomPanelTab.PREVIEW
+        _bottomPanelVisible.value = true
+    }
+
+    fun stopDevServer() {
+        webSocketManager.send(WsMessage(
+            type = MessageType.DEV_SERVER,
+            payload = "STOP",
+            id = java.util.UUID.randomUUID().toString()
+        ))
+        _isDevServerRunning.value = false
+        _previewUrl.value = ""
+    }
+
+    fun setPreviewUrl(url: String) {
+        _previewUrl.value = url
+    }
+
+    fun setPreviewDevice(device: PreviewDevice) {
+        _selectedDevice.value = device
+    }
+
+    fun clearConsoleLogs() {
+        _consoleLogs.value = emptyList()
+    }
+
+    fun clearBuildOutput() {
+        _buildOutput.value = emptyList()
+        _buildState.value = BuildState.IDLE
+    }
+
+    fun openPreview() {
+        _bottomPanelTab.value = BottomPanelTab.PREVIEW
+        _bottomPanelVisible.value = true
+    }
+
+    fun openBuild() {
+        _bottomPanelTab.value = BottomPanelTab.BUILD
+        _bottomPanelVisible.value = true
     }
 
     override fun onCleared() {

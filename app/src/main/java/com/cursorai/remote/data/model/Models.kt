@@ -25,7 +25,13 @@ enum class MessageType {
     @SerializedName("terminal_output") TERMINAL_OUTPUT,
     @SerializedName("ai_response") AI_RESPONSE,
     @SerializedName("status") STATUS,
-    @SerializedName("error") ERROR
+    @SerializedName("error") ERROR,
+    @SerializedName("build_command") BUILD_COMMAND,
+    @SerializedName("build_output") BUILD_OUTPUT,
+    @SerializedName("build_status") BUILD_STATUS,
+    @SerializedName("dev_server") DEV_SERVER,
+    @SerializedName("dev_server_status") DEV_SERVER_STATUS,
+    @SerializedName("preview_url") PREVIEW_URL
 }
 
 // WebSocket message envelope
@@ -111,8 +117,50 @@ enum class SidebarPanel {
 
 // Bottom panel tab
 enum class BottomPanelTab {
-    PROBLEMS, OUTPUT, TERMINAL, AI_CHAT, DEBUG_CONSOLE
+    PROBLEMS, OUTPUT, TERMINAL, AI_CHAT, DEBUG_CONSOLE, PREVIEW, BUILD
 }
+
+// Build state
+enum class BuildState {
+    IDLE, BUILDING, SUCCESS, FAILED
+}
+
+// Build task configuration
+data class BuildTask(
+    val name: String,
+    val command: String,
+    val description: String = "",
+    val isDevServer: Boolean = false
+)
+
+// Dev server state
+data class DevServerState(
+    val isRunning: Boolean = false,
+    val url: String = "",
+    val port: Int = 0,
+    val framework: String = "",
+    val pid: Int = 0
+)
+
+// Preview device mode
+enum class PreviewDevice(val label: String, val width: Int, val height: Int) {
+    RESPONSIVE("Responsive", 0, 0),
+    IPHONE_SE("iPhone SE", 375, 667),
+    IPHONE_14("iPhone 14", 390, 844),
+    IPHONE_14_PRO_MAX("iPhone 14 Pro Max", 430, 932),
+    PIXEL_7("Pixel 7", 412, 915),
+    IPAD("iPad", 810, 1080),
+    IPAD_PRO("iPad Pro 12.9", 1024, 1366),
+    DESKTOP_HD("Desktop HD", 1920, 1080),
+    DESKTOP_4K("Desktop 4K", 3840, 2160)
+}
+
+// Console log entry from WebView
+data class ConsoleLogEntry(
+    val level: String, // log, warn, error, info
+    val message: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
 
 // Problem/diagnostic entry
 data class DiagnosticEntry(
