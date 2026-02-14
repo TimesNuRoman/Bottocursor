@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Background circle -->
+    <path
+        android:fillColor="#7C3AED"
+        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0" />
+
+    <!-- Cursor icon - stylized code bracket with mic -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,36L30,54L38,72"
+        android:strokeWidth="3"
+        android:strokeColor="#FFFFFF"
+        android:fillType="nonZero" />
+
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,36L78,54L70,72"
+        android:strokeWidth="3"
+        android:strokeColor="#FFFFFF"
+        android:fillType="nonZero" />
+
+    <!-- Mic icon in center -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,42C51.8,42 50,43.8 50,46L50,54C50,56.2 51.8,58 54,58C56.2,58 58,56.2 58,54L58,46C58,43.8 56.2,42 54,42ZM61,54C61,57.9 57.9,61 54,61C50.1,61 47,57.9 47,54L45,54C45,58.7 48.6,62.6 53,63.2L53,67L55,67L55,63.2C59.4,62.6 63,58.7 63,54L61,54Z" />
+
+</vector>
