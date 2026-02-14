@@ -1,0 +1,27 @@
+# Gradle
+.gradle/
+build/
+local.properties
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Android
+app/build/
+*.apk
+*.aab
+*.ap_
+
+# Kotlin
+*.class
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (server)
+server/node_modules/
+server/package-lock.json
