@@ -31,7 +31,10 @@ enum class MessageType {
     @SerializedName("build_status") BUILD_STATUS,
     @SerializedName("dev_server") DEV_SERVER,
     @SerializedName("dev_server_status") DEV_SERVER_STATUS,
-    @SerializedName("preview_url") PREVIEW_URL
+    @SerializedName("preview_url") PREVIEW_URL,
+    @SerializedName("deploy_command") DEPLOY_COMMAND,
+    @SerializedName("deploy_output") DEPLOY_OUTPUT,
+    @SerializedName("deploy_status") DEPLOY_STATUS
 }
 
 // WebSocket message envelope
@@ -241,8 +244,39 @@ data class PlanningQuestion(
 
 // Bottom panel tab
 enum class BottomPanelTab {
-    PROBLEMS, OUTPUT, TERMINAL, AI_CHAT, DEBUG_CONSOLE, PREVIEW, BUILD
+    PROBLEMS, OUTPUT, TERMINAL, AI_CHAT, DEBUG_CONSOLE, PREVIEW, BUILD, DEPLOY
 }
+
+// ========== Cloudflare / Wrangler Deployment ==========
+
+enum class DeployState {
+    IDLE, DEPLOYING, SUCCESS, FAILED
+}
+
+data class DeployTarget(
+    val name: String,
+    val command: String,
+    val description: String = "",
+    val icon: String = "cloud"  // cloud, workers, pages, r2, d1, kv
+)
+
+data class DeploymentInfo(
+    val url: String = "",
+    val workerName: String = "",
+    val environment: String = "production",
+    val timestamp: Long = 0,
+    val version: String = "",
+    val routes: List<String> = emptyList(),
+    val size: String = ""
+)
+
+data class CloudflareProject(
+    val name: String = "",
+    val accountId: String = "",
+    val hasWranglerToml: Boolean = false,
+    val workerType: String = "",  // "worker", "pages", "durable-object"
+    val bindings: List<String> = emptyList()  // KV, R2, D1, etc.
+)
 
 // Build state
 enum class BuildState {

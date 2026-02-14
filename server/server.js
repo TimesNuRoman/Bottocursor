@@ -144,6 +144,10 @@ function handleMessage(ws, message) {
             handleDevServer(ws, message);
             break;
 
+        case 'deploy_command':
+            handleDeployCommand(ws, message);
+            break;
+
         case 'status':
             ws.send(JSON.stringify({
                 type: 'status',
@@ -642,6 +646,135 @@ function getLocalIP() {
     return 'localhost';
 }
 
+/**
+ * Handle Cloudflare Wrangler deploy commands.
+ * Supports: deploy, pages deploy, dev, tail, init, kv, r2, d1, secret, whoami
+ */
+let deployProcess = null;
+
+function handleDeployCommand(ws, message) {
+    const command = message.payload;
+
+    if (command === 'STOP') {
+        if (deployProcess) {
+            try { deployProcess.kill('SIGTERM'); } catch (_) {}
+            deployProcess = null;
+        }
+        ws.send(JSON.stringify({ type: 'deploy_status', payload: 'idle', id: message.id, timestamp: Date.now() }));
+        return;
+    }
+
+    // Kill existing deploy process
+    if (deployProcess) {
+        try { deployProcess.kill('SIGTERM'); } catch (_) {}
+    }
+
+    log(`Deploy: ${command}`);
+    ws.send(JSON.stringify({ type: 'deploy_status', payload: 'deploying', id: message.id, timestamp: Date.now() }));
+    ws.send(JSON.stringify({ type: 'deploy_output', payload: `$ ${command}`, id: message.id, timestamp: Date.now() }));
+    ws.send(JSON.stringify({ type: 'deploy_output', payload: '', id: message.id, timestamp: Date.now() }));
+
+    // Check for wrangler.toml
+    const hasWranglerToml = fs.existsSync(path.join(WORKSPACE, 'wrangler.toml')) ||
+                            fs.existsSync(path.join(WORKSPACE, 'wrangler.jsonc')) ||
+                            fs.existsSync(path.join(WORKSPACE, 'wrangler.json'));
+
+    if (!hasWranglerToml && !command.includes('init') && !command.includes('whoami') &&
+        !command.includes('list') && !command.includes('--help')) {
+        ws.send(JSON.stringify({
+            type: 'deploy_output',
+            payload: '⚠️  No wrangler.toml found. Run "wrangler init" first.',
+            id: message.id, timestamp: Date.now()
+        }));
+    }
+
+    deployProcess = spawn('sh', ['-c', command], {
+        cwd: WORKSPACE,
+        env: {
+            ...process.env,
+            FORCE_COLOR: '0',
+            // Pass through Cloudflare credentials if set
+            CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN || '',
+            CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID || '',
+            CF_API_TOKEN: process.env.CF_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN || '',
+        },
+        timeout: 300000
+    });
+
+    let deployUrl = '';
+
+    deployProcess.stdout.on('data', (data) => {
+        const text = data.toString();
+        text.split('\n').forEach(line => {
+            if (line.trim()) {
+                ws.send(JSON.stringify({ type: 'deploy_output', payload: line, id: message.id, timestamp: Date.now() }));
+
+                // Detect deployed URL from wrangler output
+                const urlPatterns = [
+                    /Published\s+.*?(https:\/\/[^\s]+\.workers\.dev)/i,
+                    /Deployment complete!\s+.*?(https:\/\/[^\s]+)/i,
+                    /(https:\/\/[^\s]+\.workers\.dev)/,
+                    /(https:\/\/[^\s]+\.pages\.dev)/,
+                    /URL:\s+(https:\/\/[^\s]+)/i,
+                    /Preview URL:\s+(https:\/\/[^\s]+)/i,
+                ];
+
+                for (const pattern of urlPatterns) {
+                    const match = line.match(pattern);
+                    if (match && !deployUrl) {
+                        deployUrl = match[1] || match[0];
+                        log(`Deploy URL detected: ${deployUrl}`);
+                    }
+                }
+
+                // Detect worker name
+                const nameMatch = line.match(/Deploying\s+["']?(\S+?)["']?\s/i) ||
+                                  line.match(/Worker\s+["']?(\S+?)["']?\s/i);
+                if (nameMatch) {
+                    debug(`Worker name: ${nameMatch[1]}`);
+                }
+            }
+        });
+    });
+
+    deployProcess.stderr.on('data', (data) => {
+        const text = data.toString();
+        text.split('\n').forEach(line => {
+            if (line.trim()) {
+                ws.send(JSON.stringify({ type: 'deploy_output', payload: line, id: message.id, timestamp: Date.now() }));
+            }
+        });
+    });
+
+    deployProcess.on('close', (code) => {
+        deployProcess = null;
+        const status = code === 0 ? 'success' : 'failed';
+        ws.send(JSON.stringify({ type: 'deploy_output', payload: '', id: message.id, timestamp: Date.now() }));
+
+        if (code === 0 && deployUrl) {
+            ws.send(JSON.stringify({
+                type: 'deploy_output',
+                payload: `✅ Deployed successfully to: ${deployUrl}`,
+                id: message.id, timestamp: Date.now()
+            }));
+        } else if (code === 0) {
+            ws.send(JSON.stringify({
+                type: 'deploy_output',
+                payload: `✅ Command completed successfully`,
+                id: message.id, timestamp: Date.now()
+            }));
+        } else {
+            ws.send(JSON.stringify({
+                type: 'deploy_output',
+                payload: `✘ Process exited with code ${code}`,
+                id: message.id, timestamp: Date.now()
+            }));
+        }
+
+        ws.send(JSON.stringify({ type: 'deploy_status', payload: status, id: message.id, timestamp: Date.now() }));
+    });
+}
+
 function sendResponse(ws, id, payload) {
     ws.send(JSON.stringify({
         type: 'response',
@@ -694,6 +827,11 @@ function cleanup() {
     buildProcesses.forEach((proc) => {
         try { proc.kill('SIGTERM'); } catch (_) {}
     });
+
+    // Kill deploy process
+    if (deployProcess) {
+        try { deployProcess.kill('SIGTERM'); } catch (_) {}
+    }
 
     wss.close(() => {
         process.exit(0);

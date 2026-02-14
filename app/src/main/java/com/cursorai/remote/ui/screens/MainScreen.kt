@@ -276,6 +276,11 @@ fun CursorIDELayout(
                     val selectedDevice by viewModel.selectedDevice.collectAsState()
                     val buildState by viewModel.buildState.collectAsState()
                     val buildOutput by viewModel.buildOutput.collectAsState()
+                    // Deploy
+                    val deployState by viewModel.deployState.collectAsState()
+                    val deployOutput by viewModel.deployOutput.collectAsState()
+                    val lastDeployment by viewModel.lastDeployment.collectAsState()
+                    val cfProject by viewModel.cfProject.collectAsState()
 
                     BottomPanel(
                         visible = bottomPanelVisible,
@@ -308,6 +313,17 @@ fun CursorIDELayout(
                         onRunBuildTask = { viewModel.runBuildTask(it) },
                         onStopBuild = { viewModel.stopBuild() },
                         onClearBuildOutput = { viewModel.clearBuildOutput() },
+                        // Deploy callbacks
+                        deployState = deployState,
+                        deployOutput = deployOutput,
+                        deployTargets = viewModel.deployTargets,
+                        lastDeployment = lastDeployment,
+                        cfProject = cfProject,
+                        onDeploy = { viewModel.deploy(it) },
+                        onStopDeploy = { viewModel.stopDeploy() },
+                        onClearDeployOutput = { viewModel.clearDeployOutput() },
+                        onInitWrangler = { viewModel.initWrangler() },
+                        onOpenDeployUrl = { /* open in preview */ viewModel.setPreviewUrl(it) },
                         modifier = if (bottomPanelVisible) Modifier.weight(0.4f) else Modifier
                     )
                 }

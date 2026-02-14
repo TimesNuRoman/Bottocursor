@@ -122,6 +122,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         BuildTask("typecheck", "npx tsc --noEmit", "TypeScript type check"),
     )
 
+    // ========== Cloudflare / Deploy State ==========
+    private val _deployState = MutableStateFlow(DeployState.IDLE)
+    val deployState: StateFlow<DeployState> = _deployState
+
+    private val _deployOutput = MutableStateFlow<List<String>>(emptyList())
+    val deployOutput: StateFlow<List<String>> = _deployOutput
+
+    private val _lastDeployment = MutableStateFlow<DeploymentInfo?>(null)
+    val lastDeployment: StateFlow<DeploymentInfo?> = _lastDeployment
+
+    private val _cfProject = MutableStateFlow<CloudflareProject?>(null)
+    val cfProject: StateFlow<CloudflareProject?> = _cfProject
+
+    val deployTargets = listOf(
+        DeployTarget("Deploy Worker", "npx wrangler deploy", "Deploy to Cloudflare Workers", "workers"),
+        DeployTarget("Deploy Pages", "npx wrangler pages deploy ./dist", "Deploy to Cloudflare Pages", "pages"),
+        DeployTarget("Dev (local)", "npx wrangler dev", "Run local dev with Miniflare", "workers"),
+        DeployTarget("Tail Logs", "npx wrangler tail", "Stream live logs from Worker", "tail"),
+        DeployTarget("Publish (legacy)", "npx wrangler publish", "Publish Worker (legacy)", "workers"),
+        DeployTarget("KV List", "npx wrangler kv:namespace list", "List KV namespaces", "kv"),
+        DeployTarget("R2 List", "npx wrangler r2 bucket list", "List R2 buckets", "r2"),
+        DeployTarget("D1 List", "npx wrangler d1 list", "List D1 databases", "d1"),
+        DeployTarget("Secret Put", "npx wrangler secret put", "Add a secret to Worker", "workers"),
+        DeployTarget("Whoami", "npx wrangler whoami", "Show Cloudflare account info", "cloud"),
+    )
+
     // ========== Project Planning State ==========
     private val _projectPlan = MutableStateFlow<ProjectPlan?>(null)
     val projectPlan: StateFlow<ProjectPlan?> = _projectPlan
@@ -362,6 +388,30 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
                 _isDevServerRunning.value = true
             }
 
+            MessageType.DEPLOY_OUTPUT -> {
+                val lines = _deployOutput.value.toMutableList()
+                lines.add(message.payload)
+                _deployOutput.value = lines
+                // Detect deployment URL
+                val urlMatch = Regex("https://[\\w.-]+\\.workers\\.dev|https://[\\w.-]+\\.pages\\.dev|https://[\\w.-]+\\.cfworkers\\.com")
+                    .find(message.payload)
+                if (urlMatch != null) {
+                    _lastDeployment.value = (_lastDeployment.value ?: DeploymentInfo()).copy(
+                        url = urlMatch.value,
+                        timestamp = System.currentTimeMillis()
+                    )
+                }
+            }
+
+            MessageType.DEPLOY_STATUS -> {
+                when (message.payload) {
+                    "deploying" -> _deployState.value = DeployState.DEPLOYING
+                    "success" -> _deployState.value = DeployState.SUCCESS
+                    "failed" -> _deployState.value = DeployState.FAILED
+                    "idle" -> _deployState.value = DeployState.IDLE
+                }
+            }
+
             MessageType.ERROR -> {
                 val lines = _terminalLines.value.toMutableList()
                 lines.add(TerminalLine("Error: ${message.payload}"))
@@ -493,6 +543,33 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
             }
             lowerText.contains("lint") || lowerText.contains("линт") -> {
                 runBuildTask(buildTasks.first { it.name == "lint" })
+                null
+            }
+
+            // Cloudflare / Deploy
+            lowerText.contains("deploy") || lowerText.contains("деплой") ||
+                    lowerText.contains("залей") || lowerText.contains("опубликуй") -> {
+                deploy(deployTargets.first())
+                openDeploy()
+                null
+            }
+            lowerText.contains("deploy pages") || lowerText.contains("пейджес") || lowerText.contains("pages") -> {
+                deploy(deployTargets.first { it.icon == "pages" })
+                openDeploy()
+                null
+            }
+            lowerText.contains("wrangler dev") || lowerText.contains("wrangler") && lowerText.contains("dev") -> {
+                deploy(deployTargets.first { it.command.contains("wrangler dev") })
+                openDeploy()
+                null
+            }
+            lowerText.contains("tail") || lowerText.contains("логи воркера") || lowerText.contains("worker logs") -> {
+                deploy(deployTargets.first { it.icon == "tail" })
+                openDeploy()
+                null
+            }
+            lowerText.contains("wrangler init") || lowerText.contains("инит wrangler") -> {
+                initWrangler()
                 null
             }
 
@@ -726,6 +803,49 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
 
     fun openBuild() {
         _bottomPanelTab.value = BottomPanelTab.BUILD
+        _bottomPanelVisible.value = true
+    }
+
+    // ========== Cloudflare Deploy ==========
+
+    fun deploy(target: DeployTarget) {
+        _deployOutput.value = listOf("$ ${target.command}")
+        _deployState.value = DeployState.DEPLOYING
+        webSocketManager.send(WsMessage(
+            type = MessageType.DEPLOY_COMMAND,
+            payload = target.command,
+            id = java.util.UUID.randomUUID().toString()
+        ))
+    }
+
+    fun stopDeploy() {
+        webSocketManager.send(WsMessage(
+            type = MessageType.DEPLOY_COMMAND,
+            payload = "STOP",
+            id = java.util.UUID.randomUUID().toString()
+        ))
+        _deployState.value = DeployState.IDLE
+    }
+
+    fun clearDeployOutput() {
+        _deployOutput.value = emptyList()
+        _deployState.value = DeployState.IDLE
+    }
+
+    fun initWrangler() {
+        _deployOutput.value = listOf("$ npx wrangler init")
+        _deployState.value = DeployState.DEPLOYING
+        _bottomPanelTab.value = BottomPanelTab.DEPLOY
+        _bottomPanelVisible.value = true
+        webSocketManager.send(WsMessage(
+            type = MessageType.DEPLOY_COMMAND,
+            payload = "npx wrangler init --yes",
+            id = java.util.UUID.randomUUID().toString()
+        ))
+    }
+
+    fun openDeploy() {
+        _bottomPanelTab.value = BottomPanelTab.DEPLOY
         _bottomPanelVisible.value = true
     }
 

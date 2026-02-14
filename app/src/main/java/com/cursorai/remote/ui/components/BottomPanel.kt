@@ -66,6 +66,17 @@ fun BottomPanel(
     onRunBuildTask: (com.cursorai.remote.data.model.BuildTask) -> Unit = {},
     onStopBuild: () -> Unit = {},
     onClearBuildOutput: () -> Unit = {},
+    // Deploy (Cloudflare) props
+    deployState: com.cursorai.remote.data.model.DeployState = com.cursorai.remote.data.model.DeployState.IDLE,
+    deployOutput: List<String> = emptyList(),
+    deployTargets: List<com.cursorai.remote.data.model.DeployTarget> = emptyList(),
+    lastDeployment: com.cursorai.remote.data.model.DeploymentInfo? = null,
+    cfProject: com.cursorai.remote.data.model.CloudflareProject? = null,
+    onDeploy: (com.cursorai.remote.data.model.DeployTarget) -> Unit = {},
+    onStopDeploy: () -> Unit = {},
+    onClearDeployOutput: () -> Unit = {},
+    onInitWrangler: () -> Unit = {},
+    onOpenDeployUrl: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -141,6 +152,18 @@ fun BottomPanel(
                         onStopBuild = onStopBuild,
                         onClearOutput = onClearBuildOutput
                     )
+                    BottomPanelTab.DEPLOY -> CloudflareDeployPanel(
+                        deployState = deployState,
+                        deployOutput = deployOutput,
+                        deployTargets = deployTargets,
+                        lastDeployment = lastDeployment,
+                        cfProject = cfProject,
+                        onDeploy = onDeploy,
+                        onStopDeploy = onStopDeploy,
+                        onClearOutput = onClearDeployOutput,
+                        onInitWrangler = onInitWrangler,
+                        onOpenUrl = onOpenDeployUrl
+                    )
                 }
             }
         }
@@ -172,6 +195,8 @@ fun PanelTabHeader(
             tintActive = CursorSecondary)
         PanelTab("BUILD", BottomPanelTab.BUILD, activeTab, onTabSelect,
             tintActive = StatusSuccess)
+        PanelTab("DEPLOY", BottomPanelTab.DEPLOY, activeTab, onTabSelect,
+            tintActive = Color(0xFFF6821F))  // Cloudflare orange
         PanelTab("AI CHAT", BottomPanelTab.AI_CHAT, activeTab, onTabSelect,
             tintActive = CursorPrimary)
         PanelTab("DEBUG", BottomPanelTab.DEBUG_CONSOLE, activeTab, onTabSelect)
