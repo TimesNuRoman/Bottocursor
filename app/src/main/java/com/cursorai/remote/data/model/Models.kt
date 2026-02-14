@@ -34,7 +34,11 @@ enum class MessageType {
     @SerializedName("preview_url") PREVIEW_URL,
     @SerializedName("deploy_command") DEPLOY_COMMAND,
     @SerializedName("deploy_output") DEPLOY_OUTPUT,
-    @SerializedName("deploy_status") DEPLOY_STATUS
+    @SerializedName("deploy_status") DEPLOY_STATUS,
+    @SerializedName("r2_command") R2_COMMAND,
+    @SerializedName("r2_data") R2_DATA,
+    @SerializedName("d1_command") D1_COMMAND,
+    @SerializedName("d1_data") D1_DATA
 }
 
 // WebSocket message envelope
@@ -244,7 +248,7 @@ data class PlanningQuestion(
 
 // Bottom panel tab
 enum class BottomPanelTab {
-    PROBLEMS, OUTPUT, TERMINAL, AI_CHAT, DEBUG_CONSOLE, PREVIEW, BUILD, DEPLOY
+    PROBLEMS, OUTPUT, TERMINAL, AI_CHAT, DEBUG_CONSOLE, PREVIEW, BUILD, DEPLOY, R2, D1
 }
 
 // ========== Cloudflare / Wrangler Deployment ==========
@@ -276,6 +280,64 @@ data class CloudflareProject(
     val hasWranglerToml: Boolean = false,
     val workerType: String = "",  // "worker", "pages", "durable-object"
     val bindings: List<String> = emptyList()  // KV, R2, D1, etc.
+)
+
+// ========== R2 Object Storage Browser ==========
+
+data class R2Bucket(
+    val name: String,
+    val createdAt: String = ""
+)
+
+data class R2Object(
+    val key: String,
+    val size: Long = 0,
+    val lastModified: String = "",
+    val etag: String = "",
+    val httpMetadata: String = ""
+) {
+    val fileName: String get() = key.substringAfterLast('/')
+    val isFolder: Boolean get() = key.endsWith('/')
+    val extension: String get() = fileName.substringAfterLast('.', "")
+    val sizeFormatted: String get() {
+        return when {
+            size < 1024 -> "${size} B"
+            size < 1024 * 1024 -> "${size / 1024} KB"
+            size < 1024 * 1024 * 1024 -> String.format("%.1f MB", size / (1024.0 * 1024.0))
+            else -> String.format("%.2f GB", size / (1024.0 * 1024.0 * 1024.0))
+        }
+    }
+}
+
+// ========== D1 Database Browser ==========
+
+data class D1Database(
+    val uuid: String = "",
+    val name: String,
+    val numTables: Int = 0,
+    val fileSize: Long = 0
+)
+
+data class D1Table(
+    val name: String,
+    val sql: String = "",       // CREATE TABLE statement
+    val rowCount: Long = 0
+)
+
+data class D1Column(
+    val name: String,
+    val type: String,
+    val isPrimaryKey: Boolean = false,
+    val isNotNull: Boolean = false,
+    val defaultValue: String? = null
+)
+
+data class D1QueryResult(
+    val columns: List<String> = emptyList(),
+    val rows: List<List<String>> = emptyList(),
+    val rowsAffected: Int = 0,
+    val duration: Long = 0,       // ms
+    val error: String = ""
 )
 
 // Build state

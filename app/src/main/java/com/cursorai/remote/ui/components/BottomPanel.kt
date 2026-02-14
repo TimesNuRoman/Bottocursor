@@ -77,6 +77,33 @@ fun BottomPanel(
     onClearDeployOutput: () -> Unit = {},
     onInitWrangler: () -> Unit = {},
     onOpenDeployUrl: (String) -> Unit = {},
+    // R2 Browser props
+    r2Buckets: List<com.cursorai.remote.data.model.R2Bucket> = emptyList(),
+    r2Objects: List<com.cursorai.remote.data.model.R2Object> = emptyList(),
+    r2CurrentBucket: String = "",
+    r2CurrentPrefix: String = "",
+    r2IsLoading: Boolean = false,
+    r2PreviewContent: String = "",
+    r2PreviewKey: String = "",
+    onR2SelectBucket: (String) -> Unit = {},
+    onR2Navigate: (String) -> Unit = {},
+    onR2Refresh: () -> Unit = {},
+    onR2Preview: (String) -> Unit = {},
+    onR2Download: (String) -> Unit = {},
+    onR2Delete: (String) -> Unit = {},
+    onR2DismissPreview: () -> Unit = {},
+    // D1 Browser props
+    d1Databases: List<com.cursorai.remote.data.model.D1Database> = emptyList(),
+    d1Tables: List<com.cursorai.remote.data.model.D1Table> = emptyList(),
+    d1Columns: List<com.cursorai.remote.data.model.D1Column> = emptyList(),
+    d1QueryResult: com.cursorai.remote.data.model.D1QueryResult? = null,
+    d1CurrentDatabase: String = "",
+    d1CurrentTable: String = "",
+    d1IsLoading: Boolean = false,
+    onD1SelectDatabase: (String) -> Unit = {},
+    onD1SelectTable: (String) -> Unit = {},
+    onD1ExecuteQuery: (String) -> Unit = {},
+    onD1Refresh: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -164,6 +191,35 @@ fun BottomPanel(
                         onInitWrangler = onInitWrangler,
                         onOpenUrl = onOpenDeployUrl
                     )
+                    BottomPanelTab.R2 -> R2BrowserPanel(
+                        buckets = r2Buckets,
+                        objects = r2Objects,
+                        currentBucket = r2CurrentBucket,
+                        currentPrefix = r2CurrentPrefix,
+                        isLoading = r2IsLoading,
+                        previewContent = r2PreviewContent,
+                        previewKey = r2PreviewKey,
+                        onSelectBucket = onR2SelectBucket,
+                        onNavigate = onR2Navigate,
+                        onRefresh = onR2Refresh,
+                        onPreview = onR2Preview,
+                        onDownload = onR2Download,
+                        onDelete = onR2Delete,
+                        onDismissPreview = onR2DismissPreview
+                    )
+                    BottomPanelTab.D1 -> D1BrowserPanel(
+                        databases = d1Databases,
+                        tables = d1Tables,
+                        columns = d1Columns,
+                        queryResult = d1QueryResult,
+                        currentDatabase = d1CurrentDatabase,
+                        currentTable = d1CurrentTable,
+                        isLoading = d1IsLoading,
+                        onSelectDatabase = onD1SelectDatabase,
+                        onSelectTable = onD1SelectTable,
+                        onExecuteQuery = onD1ExecuteQuery,
+                        onRefresh = onD1Refresh
+                    )
                 }
             }
         }
@@ -197,6 +253,10 @@ fun PanelTabHeader(
             tintActive = StatusSuccess)
         PanelTab("DEPLOY", BottomPanelTab.DEPLOY, activeTab, onTabSelect,
             tintActive = Color(0xFFF6821F))  // Cloudflare orange
+        PanelTab("R2", BottomPanelTab.R2, activeTab, onTabSelect,
+            tintActive = Color(0xFF8B5CF6))  // R2 purple
+        PanelTab("D1", BottomPanelTab.D1, activeTab, onTabSelect,
+            tintActive = Color(0xFF06B6D4))  // D1 cyan
         PanelTab("AI CHAT", BottomPanelTab.AI_CHAT, activeTab, onTabSelect,
             tintActive = CursorPrimary)
         PanelTab("DEBUG", BottomPanelTab.DEBUG_CONSOLE, activeTab, onTabSelect)

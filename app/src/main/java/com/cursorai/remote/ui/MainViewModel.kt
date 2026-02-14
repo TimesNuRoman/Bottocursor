@@ -148,6 +148,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         DeployTarget("Whoami", "npx wrangler whoami", "Show Cloudflare account info", "cloud"),
     )
 
+    // ========== R2 Browser State ==========
+    private val _r2Buckets = MutableStateFlow<List<R2Bucket>>(emptyList())
+    val r2Buckets: StateFlow<List<R2Bucket>> = _r2Buckets
+
+    private val _r2Objects = MutableStateFlow<List<R2Object>>(emptyList())
+    val r2Objects: StateFlow<List<R2Object>> = _r2Objects
+
+    private val _r2CurrentBucket = MutableStateFlow("")
+    val r2CurrentBucket: StateFlow<String> = _r2CurrentBucket
+
+    private val _r2CurrentPrefix = MutableStateFlow("")
+    val r2CurrentPrefix: StateFlow<String> = _r2CurrentPrefix
+
+    private val _r2IsLoading = MutableStateFlow(false)
+    val r2IsLoading: StateFlow<Boolean> = _r2IsLoading
+
+    private val _r2PreviewContent = MutableStateFlow("")
+    val r2PreviewContent: StateFlow<String> = _r2PreviewContent
+
+    private val _r2PreviewKey = MutableStateFlow("")
+    val r2PreviewKey: StateFlow<String> = _r2PreviewKey
+
+    // ========== D1 Browser State ==========
+    private val _d1Databases = MutableStateFlow<List<D1Database>>(emptyList())
+    val d1Databases: StateFlow<List<D1Database>> = _d1Databases
+
+    private val _d1Tables = MutableStateFlow<List<D1Table>>(emptyList())
+    val d1Tables: StateFlow<List<D1Table>> = _d1Tables
+
+    private val _d1Columns = MutableStateFlow<List<D1Column>>(emptyList())
+    val d1Columns: StateFlow<List<D1Column>> = _d1Columns
+
+    private val _d1QueryResult = MutableStateFlow<D1QueryResult?>(null)
+    val d1QueryResult: StateFlow<D1QueryResult?> = _d1QueryResult
+
+    private val _d1CurrentDatabase = MutableStateFlow("")
+    val d1CurrentDatabase: StateFlow<String> = _d1CurrentDatabase
+
+    private val _d1CurrentTable = MutableStateFlow("")
+    val d1CurrentTable: StateFlow<String> = _d1CurrentTable
+
+    private val _d1IsLoading = MutableStateFlow(false)
+    val d1IsLoading: StateFlow<Boolean> = _d1IsLoading
+
     // ========== Project Planning State ==========
     private val _projectPlan = MutableStateFlow<ProjectPlan?>(null)
     val projectPlan: StateFlow<ProjectPlan?> = _projectPlan
@@ -412,6 +456,89 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
                 }
             }
 
+            MessageType.R2_DATA -> {
+                _r2IsLoading.value = false
+                try {
+                    val json = gson.fromJson(message.payload, Map::class.java) as Map<String, Any>
+                    when (json["type"]) {
+                        "buckets" -> {
+                            val list = (json["data"] as? List<*>)?.map { item ->
+                                val m = item as Map<*, *>
+                                R2Bucket(name = m["name"]?.toString() ?: "", createdAt = m["createdAt"]?.toString() ?: "")
+                            } ?: emptyList()
+                            _r2Buckets.value = list
+                        }
+                        "objects" -> {
+                            val list = (json["data"] as? List<*>)?.map { item ->
+                                val m = item as Map<*, *>
+                                R2Object(
+                                    key = m["key"]?.toString() ?: "",
+                                    size = (m["size"] as? Number)?.toLong() ?: 0L,
+                                    lastModified = m["lastModified"]?.toString() ?: ""
+                                )
+                            } ?: emptyList()
+                            _r2Objects.value = list
+                        }
+                        "preview" -> {
+                            _r2PreviewContent.value = json["data"]?.toString() ?: ""
+                            _r2PreviewKey.value = json["key"]?.toString() ?: ""
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            MessageType.D1_DATA -> {
+                _d1IsLoading.value = false
+                try {
+                    val json = gson.fromJson(message.payload, Map::class.java) as Map<String, Any>
+                    when (json["type"]) {
+                        "databases" -> {
+                            val list = (json["data"] as? List<*>)?.map { item ->
+                                val m = item as Map<*, *>
+                                D1Database(
+                                    uuid = m["uuid"]?.toString() ?: "",
+                                    name = m["name"]?.toString() ?: "",
+                                    numTables = (m["num_tables"] as? Number)?.toInt() ?: 0
+                                )
+                            } ?: emptyList()
+                            _d1Databases.value = list
+                        }
+                        "tables" -> {
+                            val list = (json["data"] as? List<*>)?.map { item ->
+                                val m = item as Map<*, *>
+                                D1Table(name = m["name"]?.toString() ?: "")
+                            } ?: emptyList()
+                            _d1Tables.value = list
+                        }
+                        "columns" -> {
+                            val list = (json["data"] as? List<*>)?.map { item ->
+                                val m = item as Map<*, *>
+                                D1Column(
+                                    name = m["name"]?.toString() ?: "",
+                                    type = m["type"]?.toString() ?: "",
+                                    isPrimaryKey = m["pk"] == true || m["pk"] == 1.0,
+                                    isNotNull = m["notnull"] == true || m["notnull"] == 1.0
+                                )
+                            } ?: emptyList()
+                            _d1Columns.value = list
+                        }
+                        "query_result" -> {
+                            val cols = (json["columns"] as? List<*>)?.map { it.toString() } ?: emptyList()
+                            val rows = (json["rows"] as? List<*>)?.map { row ->
+                                (row as? List<*>)?.map { it?.toString() ?: "null" } ?: emptyList()
+                            } ?: emptyList()
+                            _d1QueryResult.value = D1QueryResult(
+                                columns = cols,
+                                rows = rows,
+                                rowsAffected = (json["rows_affected"] as? Number)?.toInt() ?: 0,
+                                duration = (json["duration"] as? Number)?.toLong() ?: 0,
+                                error = json["error"]?.toString() ?: ""
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
             MessageType.ERROR -> {
                 val lines = _terminalLines.value.toMutableList()
                 lines.add(TerminalLine("Error: ${message.payload}"))
@@ -570,6 +697,16 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
             }
             lowerText.contains("wrangler init") || lowerText.contains("инит wrangler") -> {
                 initWrangler()
+                null
+            }
+            (lowerText.contains("r2") && (lowerText.contains("browse") || lowerText.contains("open") || lowerText.contains("show"))) ||
+                    lowerText.contains("r2 browser") || lowerText.contains("покажи r2") || lowerText.contains("хранилище") -> {
+                openR2()
+                null
+            }
+            (lowerText.contains("d1") && (lowerText.contains("browse") || lowerText.contains("open") || lowerText.contains("show") || lowerText.contains("query"))) ||
+                    lowerText.contains("d1 browser") || lowerText.contains("покажи d1") || lowerText.contains("база данных") -> {
+                openD1()
                 null
             }
 
@@ -847,6 +984,115 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
     fun openDeploy() {
         _bottomPanelTab.value = BottomPanelTab.DEPLOY
         _bottomPanelVisible.value = true
+    }
+
+    // ========== R2 Browser ==========
+
+    fun r2LoadBuckets() {
+        _r2IsLoading.value = true
+        _r2CurrentBucket.value = ""
+        webSocketManager.send(WsMessage(type = MessageType.R2_COMMAND, payload = """{"action":"list_buckets"}""", id = UUID.randomUUID().toString()))
+    }
+
+    fun r2SelectBucket(bucket: String) {
+        if (bucket.isBlank()) {
+            r2LoadBuckets()
+        } else {
+            _r2CurrentBucket.value = bucket
+            _r2CurrentPrefix.value = ""
+            _r2IsLoading.value = true
+            webSocketManager.send(WsMessage(type = MessageType.R2_COMMAND, payload = """{"action":"list_objects","bucket":"$bucket","prefix":""}""", id = UUID.randomUUID().toString()))
+        }
+    }
+
+    fun r2Navigate(prefix: String) {
+        _r2CurrentPrefix.value = prefix
+        _r2IsLoading.value = true
+        val bucket = _r2CurrentBucket.value
+        webSocketManager.send(WsMessage(type = MessageType.R2_COMMAND, payload = """{"action":"list_objects","bucket":"$bucket","prefix":"$prefix"}""", id = UUID.randomUUID().toString()))
+    }
+
+    fun r2Refresh() {
+        if (_r2CurrentBucket.value.isBlank()) r2LoadBuckets()
+        else r2Navigate(_r2CurrentPrefix.value)
+    }
+
+    fun r2Preview(key: String) {
+        val bucket = _r2CurrentBucket.value
+        webSocketManager.send(WsMessage(type = MessageType.R2_COMMAND, payload = """{"action":"get_object","bucket":"$bucket","key":"$key"}""", id = UUID.randomUUID().toString()))
+    }
+
+    fun r2Download(key: String) {
+        val bucket = _r2CurrentBucket.value
+        webSocketManager.send(WsMessage(type = MessageType.R2_COMMAND, payload = """{"action":"download","bucket":"$bucket","key":"$key"}""", id = UUID.randomUUID().toString()))
+    }
+
+    fun r2Delete(key: String) {
+        val bucket = _r2CurrentBucket.value
+        webSocketManager.send(WsMessage(type = MessageType.R2_COMMAND, payload = """{"action":"delete_object","bucket":"$bucket","key":"$key"}""", id = UUID.randomUUID().toString()))
+        // Refresh after delete
+        r2Navigate(_r2CurrentPrefix.value)
+    }
+
+    fun r2DismissPreview() {
+        _r2PreviewContent.value = ""
+        _r2PreviewKey.value = ""
+    }
+
+    fun openR2() {
+        _bottomPanelTab.value = BottomPanelTab.R2
+        _bottomPanelVisible.value = true
+        if (_r2Buckets.value.isEmpty()) r2LoadBuckets()
+    }
+
+    // ========== D1 Browser ==========
+
+    fun d1LoadDatabases() {
+        _d1IsLoading.value = true
+        _d1CurrentDatabase.value = ""
+        webSocketManager.send(WsMessage(type = MessageType.D1_COMMAND, payload = """{"action":"list_databases"}""", id = UUID.randomUUID().toString()))
+    }
+
+    fun d1SelectDatabase(name: String) {
+        if (name.isBlank()) {
+            d1LoadDatabases()
+        } else {
+            _d1CurrentDatabase.value = name
+            _d1CurrentTable.value = ""
+            _d1IsLoading.value = true
+            webSocketManager.send(WsMessage(type = MessageType.D1_COMMAND, payload = """{"action":"list_tables","database":"$name"}""", id = UUID.randomUUID().toString()))
+        }
+    }
+
+    fun d1SelectTable(name: String) {
+        if (name.isBlank()) {
+            d1SelectDatabase(_d1CurrentDatabase.value)
+        } else {
+            _d1CurrentTable.value = name
+            _d1IsLoading.value = true
+            val db = _d1CurrentDatabase.value
+            // Load schema + first 50 rows
+            webSocketManager.send(WsMessage(type = MessageType.D1_COMMAND, payload = """{"action":"table_schema","database":"$db","table":"$name"}""", id = UUID.randomUUID().toString()))
+            webSocketManager.send(WsMessage(type = MessageType.D1_COMMAND, payload = """{"action":"execute","database":"$db","sql":"SELECT * FROM $name LIMIT 50"}""", id = UUID.randomUUID().toString()))
+        }
+    }
+
+    fun d1ExecuteQuery(sql: String) {
+        _d1IsLoading.value = true
+        val db = _d1CurrentDatabase.value
+        webSocketManager.send(WsMessage(type = MessageType.D1_COMMAND, payload = """{"action":"execute","database":"$db","sql":"${sql.replace("\"", "\\\"")}"}""", id = UUID.randomUUID().toString()))
+    }
+
+    fun d1Refresh() {
+        if (_d1CurrentTable.value.isNotBlank()) d1SelectTable(_d1CurrentTable.value)
+        else if (_d1CurrentDatabase.value.isNotBlank()) d1SelectDatabase(_d1CurrentDatabase.value)
+        else d1LoadDatabases()
+    }
+
+    fun openD1() {
+        _bottomPanelTab.value = BottomPanelTab.D1
+        _bottomPanelVisible.value = true
+        if (_d1Databases.value.isEmpty()) d1LoadDatabases()
     }
 
     // ========== Project Planning ==========

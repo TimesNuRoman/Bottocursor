@@ -281,6 +281,22 @@ fun CursorIDELayout(
                     val deployOutput by viewModel.deployOutput.collectAsState()
                     val lastDeployment by viewModel.lastDeployment.collectAsState()
                     val cfProject by viewModel.cfProject.collectAsState()
+                    // R2
+                    val r2Buckets by viewModel.r2Buckets.collectAsState()
+                    val r2Objects by viewModel.r2Objects.collectAsState()
+                    val r2CurrentBucket by viewModel.r2CurrentBucket.collectAsState()
+                    val r2CurrentPrefix by viewModel.r2CurrentPrefix.collectAsState()
+                    val r2IsLoading by viewModel.r2IsLoading.collectAsState()
+                    val r2PreviewContent by viewModel.r2PreviewContent.collectAsState()
+                    val r2PreviewKey by viewModel.r2PreviewKey.collectAsState()
+                    // D1
+                    val d1Databases by viewModel.d1Databases.collectAsState()
+                    val d1Tables by viewModel.d1Tables.collectAsState()
+                    val d1Columns by viewModel.d1Columns.collectAsState()
+                    val d1QueryResult by viewModel.d1QueryResult.collectAsState()
+                    val d1CurrentDatabase by viewModel.d1CurrentDatabase.collectAsState()
+                    val d1CurrentTable by viewModel.d1CurrentTable.collectAsState()
+                    val d1IsLoading by viewModel.d1IsLoading.collectAsState()
 
                     BottomPanel(
                         visible = bottomPanelVisible,
@@ -323,7 +339,27 @@ fun CursorIDELayout(
                         onStopDeploy = { viewModel.stopDeploy() },
                         onClearDeployOutput = { viewModel.clearDeployOutput() },
                         onInitWrangler = { viewModel.initWrangler() },
-                        onOpenDeployUrl = { /* open in preview */ viewModel.setPreviewUrl(it) },
+                        onOpenDeployUrl = { viewModel.setPreviewUrl(it) },
+                        // R2 callbacks
+                        r2Buckets = r2Buckets, r2Objects = r2Objects,
+                        r2CurrentBucket = r2CurrentBucket, r2CurrentPrefix = r2CurrentPrefix,
+                        r2IsLoading = r2IsLoading, r2PreviewContent = r2PreviewContent, r2PreviewKey = r2PreviewKey,
+                        onR2SelectBucket = { viewModel.r2SelectBucket(it) },
+                        onR2Navigate = { viewModel.r2Navigate(it) },
+                        onR2Refresh = { viewModel.r2Refresh() },
+                        onR2Preview = { viewModel.r2Preview(it) },
+                        onR2Download = { viewModel.r2Download(it) },
+                        onR2Delete = { viewModel.r2Delete(it) },
+                        onR2DismissPreview = { viewModel.r2DismissPreview() },
+                        // D1 callbacks
+                        d1Databases = d1Databases, d1Tables = d1Tables,
+                        d1Columns = d1Columns, d1QueryResult = d1QueryResult,
+                        d1CurrentDatabase = d1CurrentDatabase, d1CurrentTable = d1CurrentTable,
+                        d1IsLoading = d1IsLoading,
+                        onD1SelectDatabase = { viewModel.d1SelectDatabase(it) },
+                        onD1SelectTable = { viewModel.d1SelectTable(it) },
+                        onD1ExecuteQuery = { viewModel.d1ExecuteQuery(it) },
+                        onD1Refresh = { viewModel.d1Refresh() },
                         modifier = if (bottomPanelVisible) Modifier.weight(0.4f) else Modifier
                     )
                 }

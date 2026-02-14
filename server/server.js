@@ -148,6 +148,14 @@ function handleMessage(ws, message) {
             handleDeployCommand(ws, message);
             break;
 
+        case 'r2_command':
+            handleR2Command(ws, message);
+            break;
+
+        case 'd1_command':
+            handleD1Command(ws, message);
+            break;
+
         case 'status':
             ws.send(JSON.stringify({
                 type: 'status',
@@ -773,6 +781,202 @@ function handleDeployCommand(ws, message) {
 
         ws.send(JSON.stringify({ type: 'deploy_status', payload: status, id: message.id, timestamp: Date.now() }));
     });
+}
+
+/**
+ * Handle R2 Object Storage commands.
+ * Wraps wrangler r2 CLI for bucket/object operations and parses JSON output.
+ */
+function handleR2Command(ws, message) {
+    let cmd;
+    try { cmd = JSON.parse(message.payload); } catch (_) { sendError(ws, 'Invalid R2 command'); return; }
+
+    const action = cmd.action;
+    const bucket = cmd.bucket || '';
+    const key = cmd.key || '';
+    const prefix = cmd.prefix || '';
+
+    log(`R2: ${action} bucket=${bucket} key=${key}`);
+
+    switch (action) {
+        case 'list_buckets': {
+            exec('npx wrangler r2 bucket list --json 2>/dev/null || npx wrangler r2 bucket list', { cwd: WORKSPACE, timeout: 30000 }, (err, stdout) => {
+                let buckets = [];
+                try {
+                    buckets = JSON.parse(stdout);
+                } catch (_) {
+                    // Parse text output: lines like "  name  created"
+                    stdout.split('\n').filter(l => l.trim() && !l.includes('Name')).forEach(line => {
+                        const parts = line.trim().split(/\s{2,}/);
+                        if (parts[0]) buckets.push({ name: parts[0], createdAt: parts[1] || '' });
+                    });
+                }
+                ws.send(JSON.stringify({ type: 'r2_data', payload: JSON.stringify({ type: 'buckets', data: buckets }), id: message.id, timestamp: Date.now() }));
+            });
+            break;
+        }
+        case 'list_objects': {
+            const prefixArg = prefix ? `--prefix="${prefix}"` : '';
+            exec(`npx wrangler r2 object list "${bucket}" ${prefixArg} --json 2>/dev/null || npx wrangler r2 object list "${bucket}" ${prefixArg}`, { cwd: WORKSPACE, timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+                let objects = [];
+                try {
+                    const parsed = JSON.parse(stdout);
+                    objects = (parsed.objects || parsed || []).map(o => ({
+                        key: o.key || o.Key || '',
+                        size: o.size || o.Size || 0,
+                        lastModified: o.last_modified || o.LastModified || o.uploaded || ''
+                    }));
+                } catch (_) {
+                    // Fallback: parse text
+                    stdout.split('\n').filter(l => l.trim()).forEach(line => {
+                        const parts = line.trim().split(/\s{2,}/);
+                        if (parts[0] && !parts[0].startsWith('Key')) {
+                            objects.push({ key: parts[0], size: parseInt(parts[1]) || 0, lastModified: parts[2] || '' });
+                        }
+                    });
+                }
+                // Add folder entries for common prefixes
+                const folders = new Set();
+                const prefixLen = prefix.length;
+                objects.forEach(o => {
+                    const rest = o.key.substring(prefixLen);
+                    const slashIdx = rest.indexOf('/');
+                    if (slashIdx > 0) folders.add(prefix + rest.substring(0, slashIdx + 1));
+                });
+                const folderEntries = [...folders].map(f => ({ key: f, size: 0, lastModified: '' }));
+                const fileEntries = objects.filter(o => {
+                    const rest = o.key.substring(prefixLen);
+                    return !rest.includes('/') || rest.endsWith('/');
+                });
+                ws.send(JSON.stringify({ type: 'r2_data', payload: JSON.stringify({ type: 'objects', data: [...folderEntries, ...fileEntries] }), id: message.id, timestamp: Date.now() }));
+            });
+            break;
+        }
+        case 'get_object': {
+            exec(`npx wrangler r2 object get "${bucket}/${key}" --pipe 2>/dev/null | head -c 50000`, { cwd: WORKSPACE, timeout: 15000, maxBuffer: 5 * 1024 * 1024 }, (err, stdout) => {
+                ws.send(JSON.stringify({ type: 'r2_data', payload: JSON.stringify({ type: 'preview', key: key, data: stdout || '(binary or empty)' }), id: message.id, timestamp: Date.now() }));
+            });
+            break;
+        }
+        case 'delete_object': {
+            exec(`npx wrangler r2 object delete "${bucket}/${key}"`, { cwd: WORKSPACE, timeout: 15000 }, (err) => {
+                if (err) sendError(ws, `R2 delete failed: ${err.message}`);
+                else log(`R2: Deleted ${bucket}/${key}`);
+            });
+            break;
+        }
+    }
+}
+
+/**
+ * Handle D1 Database commands.
+ * Wraps wrangler d1 CLI for database/table/query operations.
+ */
+function handleD1Command(ws, message) {
+    let cmd;
+    try { cmd = JSON.parse(message.payload); } catch (_) { sendError(ws, 'Invalid D1 command'); return; }
+
+    const action = cmd.action;
+    const database = cmd.database || '';
+    const table = cmd.table || '';
+    const sql = cmd.sql || '';
+
+    log(`D1: ${action} db=${database} table=${table}`);
+
+    switch (action) {
+        case 'list_databases': {
+            exec('npx wrangler d1 list --json 2>/dev/null || npx wrangler d1 list', { cwd: WORKSPACE, timeout: 30000 }, (err, stdout) => {
+                let databases = [];
+                try {
+                    databases = JSON.parse(stdout);
+                } catch (_) {
+                    stdout.split('\n').filter(l => l.trim() && !l.includes('UUID')).forEach(line => {
+                        const parts = line.trim().split(/\s{2,}|\t+/);
+                        if (parts.length >= 2) databases.push({ uuid: parts[0], name: parts[1], num_tables: 0 });
+                    });
+                }
+                ws.send(JSON.stringify({ type: 'd1_data', payload: JSON.stringify({ type: 'databases', data: databases }), id: message.id, timestamp: Date.now() }));
+            });
+            break;
+        }
+        case 'list_tables': {
+            const q = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name";
+            exec(`npx wrangler d1 execute "${database}" --command="${q}" --json 2>/dev/null`, { cwd: WORKSPACE, timeout: 30000 }, (err, stdout) => {
+                let tables = [];
+                try {
+                    const parsed = JSON.parse(stdout);
+                    const results = parsed[0]?.results || parsed.results || parsed;
+                    tables = (Array.isArray(results) ? results : []).map(r => ({ name: r.name }));
+                } catch (_) {
+                    // Try non-JSON fallback
+                    exec(`npx wrangler d1 execute "${database}" --command="${q}"`, { cwd: WORKSPACE, timeout: 30000 }, (err2, stdout2) => {
+                        stdout2.split('\n').forEach(line => {
+                            const trimmed = line.trim();
+                            if (trimmed && !trimmed.startsWith('┌') && !trimmed.startsWith('├') && !trimmed.startsWith('└') && !trimmed.includes('name')) {
+                                const name = trimmed.replace(/[│\s]/g, '');
+                                if (name) tables.push({ name });
+                            }
+                        });
+                        ws.send(JSON.stringify({ type: 'd1_data', payload: JSON.stringify({ type: 'tables', data: tables }), id: message.id, timestamp: Date.now() }));
+                    });
+                    return;
+                }
+                ws.send(JSON.stringify({ type: 'd1_data', payload: JSON.stringify({ type: 'tables', data: tables }), id: message.id, timestamp: Date.now() }));
+            });
+            break;
+        }
+        case 'table_schema': {
+            exec(`npx wrangler d1 execute "${database}" --command="PRAGMA table_info(${table})" --json 2>/dev/null`, { cwd: WORKSPACE, timeout: 15000 }, (err, stdout) => {
+                let columns = [];
+                try {
+                    const parsed = JSON.parse(stdout);
+                    const results = parsed[0]?.results || parsed.results || parsed;
+                    columns = (Array.isArray(results) ? results : []).map(r => ({
+                        name: r.name, type: r.type || 'TEXT', pk: r.pk === 1, notnull: r.notnull === 1, default: r.dflt_value
+                    }));
+                } catch (_) {}
+                ws.send(JSON.stringify({ type: 'd1_data', payload: JSON.stringify({ type: 'columns', data: columns }), id: message.id, timestamp: Date.now() }));
+            });
+            break;
+        }
+        case 'execute': {
+            const startTime = Date.now();
+            const escapedSql = sql.replace(/"/g, '\\"');
+            exec(`npx wrangler d1 execute "${database}" --command="${escapedSql}" --json 2>/dev/null`, { cwd: WORKSPACE, timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+                const duration = Date.now() - startTime;
+
+                if (err && !stdout) {
+                    ws.send(JSON.stringify({ type: 'd1_data', payload: JSON.stringify({
+                        type: 'query_result', columns: [], rows: [], rows_affected: 0, duration, error: stderr || err.message
+                    }), id: message.id, timestamp: Date.now() }));
+                    return;
+                }
+
+                try {
+                    const parsed = JSON.parse(stdout);
+                    const result = parsed[0] || parsed;
+                    const results = result.results || [];
+                    const columns = results.length > 0 ? Object.keys(results[0]) : [];
+                    const rows = results.map(r => columns.map(c => r[c] != null ? String(r[c]) : 'null'));
+
+                    ws.send(JSON.stringify({ type: 'd1_data', payload: JSON.stringify({
+                        type: 'query_result',
+                        columns,
+                        rows,
+                        rows_affected: result.meta?.changes || 0,
+                        duration,
+                        error: ''
+                    }), id: message.id, timestamp: Date.now() }));
+                } catch (_) {
+                    // Fallback: send raw output
+                    ws.send(JSON.stringify({ type: 'd1_data', payload: JSON.stringify({
+                        type: 'query_result', columns: ['output'], rows: stdout.split('\n').filter(l => l.trim()).map(l => [l]), rows_affected: 0, duration, error: ''
+                    }), id: message.id, timestamp: Date.now() }));
+                }
+            });
+            break;
+        }
+    }
 }
 
 function sendResponse(ws, id, payload) {
