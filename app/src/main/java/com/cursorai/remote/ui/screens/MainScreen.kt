@@ -228,6 +228,11 @@ fun CursorIDELayout(
                     modifier = Modifier.weight(1f)
                 )
             } else {
+                // Planning state
+                val projectPlan by viewModel.projectPlan.collectAsState()
+                val planningStep by viewModel.planningStep.collectAsState()
+                val planningMessages by viewModel.planningMessages.collectAsState()
+
                 // Sidebar (collapsible, 260dp)
                 CursorSidebar(
                     visible = sidebarVisible,
@@ -235,10 +240,20 @@ fun CursorIDELayout(
                     fileTree = fileTree,
                     chatMessages = chatMessages,
                     voiceState = voiceState,
+                    // Planning
+                    projectPlan = projectPlan,
+                    planningStep = planningStep,
+                    planningMessages = planningMessages,
                     onFileSelect = { viewModel.requestFile(it) },
                     onRefresh = { viewModel.webSocketManager.requestFileTree() },
                     onSendChat = { viewModel.sendAIMessage(it) },
-                    onVoiceInput = { viewModel.toggleVoiceOverlay() }
+                    onVoiceInput = { viewModel.toggleVoiceOverlay() },
+                    // Planning callbacks
+                    onSendPlanningMessage = { viewModel.sendPlanningMessage(it) },
+                    onSelectPlanningOption = { viewModel.selectPlanningOption(it) },
+                    onStartPlanning = { viewModel.startPlanning() },
+                    onFeatureToggle = { viewModel.toggleFeatureStatus(it) },
+                    onSubtaskToggle = { fId, sId -> viewModel.toggleSubtask(fId, sId) }
                 )
 
                 // Editor area + Bottom panel

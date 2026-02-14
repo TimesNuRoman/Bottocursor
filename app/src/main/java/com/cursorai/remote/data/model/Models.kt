@@ -112,8 +112,132 @@ data class EditorTab(
 
 // Sidebar panel type (Activity Bar sections)
 enum class SidebarPanel {
-    EXPLORER, SEARCH, GIT, DEBUG, EXTENSIONS, AI_CHAT, NONE
+    EXPLORER, SEARCH, GIT, DEBUG, EXTENSIONS, AI_CHAT, PROJECT_PLAN, NONE
 }
+
+// ========== Project Planning System ==========
+
+// Planning wizard step
+enum class PlanningStep {
+    WELCOME,           // Initial greeting, project type selection
+    REQUIREMENTS,      // Gathering functional requirements
+    TECH_STACK,        // Technology choices discussion
+    ARCHITECTURE,      // Architecture & structure planning
+    FEATURES,          // Feature breakdown and prioritization
+    MILESTONES,        // Timeline and milestones
+    REVIEW,            // Plan review and confirmation
+    ACTIVE             // Plan is active, development in progress
+}
+
+// Project plan — the entire planning document
+data class ProjectPlan(
+    val id: String = "",
+    val name: String = "",
+    val description: String = "",
+    val projectType: ProjectType = ProjectType.WEB_APP,
+    val techStack: TechStack = TechStack(),
+    val requirements: List<Requirement> = emptyList(),
+    val features: List<Feature> = emptyList(),
+    val phases: List<ProjectPhase> = emptyList(),
+    val architecture: ArchitectureNotes = ArchitectureNotes(),
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val isActive: Boolean = false
+) {
+    val completionPercent: Int
+        get() {
+            val total = features.size
+            if (total == 0) return 0
+            val done = features.count { it.status == FeatureStatus.DONE }
+            return ((done.toFloat() / total) * 100).toInt()
+        }
+}
+
+enum class ProjectType(val label: String, val emoji: String) {
+    WEB_APP("Web Application", "🌐"),
+    MOBILE_APP("Mobile App", "📱"),
+    API_BACKEND("API / Backend", "⚡"),
+    FULL_STACK("Full Stack", "🏗"),
+    LIBRARY("Library / Package", "📦"),
+    CLI_TOOL("CLI Tool", "💻"),
+    DESKTOP_APP("Desktop App", "🖥"),
+    GAME("Game", "🎮"),
+    OTHER("Other", "✨")
+}
+
+data class TechStack(
+    val language: String = "",
+    val framework: String = "",
+    val styling: String = "",
+    val database: String = "",
+    val testing: String = "",
+    val deployment: String = "",
+    val otherTools: List<String> = emptyList()
+)
+
+data class Requirement(
+    val id: String = "",
+    val text: String,
+    val priority: Priority = Priority.MUST,
+    val category: String = "functional"
+)
+
+enum class Priority(val label: String, val color: String) {
+    MUST("Must Have", "red"),
+    SHOULD("Should Have", "orange"),
+    COULD("Could Have", "blue"),
+    WONT("Won't Have", "gray")
+}
+
+data class Feature(
+    val id: String = "",
+    val title: String,
+    val description: String = "",
+    val phaseId: String = "",
+    val priority: Priority = Priority.MUST,
+    val status: FeatureStatus = FeatureStatus.TODO,
+    val subtasks: List<Subtask> = emptyList(),
+    val estimateHours: Float = 0f
+)
+
+enum class FeatureStatus(val label: String) {
+    TODO("To Do"),
+    IN_PROGRESS("In Progress"),
+    IN_REVIEW("In Review"),
+    DONE("Done"),
+    BLOCKED("Blocked")
+}
+
+data class Subtask(
+    val id: String = "",
+    val text: String,
+    val isDone: Boolean = false
+)
+
+data class ProjectPhase(
+    val id: String = "",
+    val name: String,
+    val description: String = "",
+    val order: Int = 0,
+    val featureIds: List<String> = emptyList(),
+    val isComplete: Boolean = false
+)
+
+data class ArchitectureNotes(
+    val folderStructure: String = "",
+    val patterns: List<String> = emptyList(),
+    val notes: String = ""
+)
+
+// Planning chat question from AI
+data class PlanningQuestion(
+    val id: String = "",
+    val question: String,
+    val category: String = "",     // "requirements", "tech", "features", etc.
+    val options: List<String> = emptyList(),  // Suggested answers
+    val isMultiSelect: Boolean = false,
+    val answer: String = ""
+)
 
 // Bottom panel tab
 enum class BottomPanelTab {

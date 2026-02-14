@@ -122,6 +122,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         BuildTask("typecheck", "npx tsc --noEmit", "TypeScript type check"),
     )
 
+    // ========== Project Planning State ==========
+    private val _projectPlan = MutableStateFlow<ProjectPlan?>(null)
+    val projectPlan: StateFlow<ProjectPlan?> = _projectPlan
+
+    private val _planningStep = MutableStateFlow(PlanningStep.WELCOME)
+    val planningStep: StateFlow<PlanningStep> = _planningStep
+
+    private val _planningMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
+    val planningMessages: StateFlow<List<ChatMessage>> = _planningMessages
+
     // Quick actions for voice commands
     val quickActions = listOf(
         QuickAction("terminal", "Open Terminal", "workbench.action.terminal.toggleTerminal", "Toggle integrated terminal"),
@@ -436,6 +446,28 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
             lowerText.contains("generate") || lowerText.contains("генерируй") || lowerText.contains("сгенерируй") ->
                 "cursor.generate"
 
+            // Project Planning
+            lowerText.contains("new project") || lowerText.contains("новый проект") ||
+                    lowerText.contains("create project") || lowerText.contains("создай проект") -> {
+                openProjectPlanning()
+                startPlanning()
+                null
+            }
+            lowerText.contains("show plan") || lowerText.contains("покажи план") ||
+                    lowerText.contains("project plan") || lowerText.contains("план проекта") -> {
+                openProjectPlanning()
+                null
+            }
+            lowerText.contains("next task") || lowerText.contains("следующая задача") ||
+                    lowerText.contains("what's next") || lowerText.contains("что дальше") -> {
+                val plan = _projectPlan.value
+                val nextFeature = plan?.features?.firstOrNull { it.status == FeatureStatus.TODO || it.status == FeatureStatus.IN_PROGRESS }
+                if (nextFeature != null) {
+                    addChatMessage(ChatRole.ASSISTANT, "Next task: ${nextFeature.title}\n${nextFeature.description}")
+                }
+                null
+            }
+
             // Build & Preview
             lowerText.contains("preview") || lowerText.contains("превью") || lowerText.contains("предпросмотр") -> {
                 openPreview()
@@ -695,6 +727,282 @@ export const App: React.FC<AppProps> = ({ title, theme }) => {
     fun openBuild() {
         _bottomPanelTab.value = BottomPanelTab.BUILD
         _bottomPanelVisible.value = true
+    }
+
+    // ========== Project Planning ==========
+
+    fun openProjectPlanning() {
+        _sidebarPanel.value = SidebarPanel.PROJECT_PLAN
+        _sidebarVisible.value = true
+    }
+
+    fun startPlanning() {
+        _planningStep.value = PlanningStep.REQUIREMENTS
+        addPlanningMessage(ChatRole.ASSISTANT, buildString {
+            appendLine("Great! Let's plan your project. I'll ask you a few questions to understand what you need.")
+            appendLine()
+            appendLine("**Step 1: Requirements**")
+            appendLine()
+            appendLine("First, tell me about your project. What are you building and what's the main goal?")
+            appendLine()
+            appendLine("For example:")
+            appendLine("• An e-commerce store with payments")
+            appendLine("• A task manager with real-time collaboration")
+            appendLine("• A portfolio website with a blog")
+            appendLine("• A REST API for a mobile app")
+        })
+    }
+
+    fun sendPlanningMessage(text: String) {
+        addPlanningMessage(ChatRole.USER, text)
+
+        // Send to AI for processing, include the current planning step context
+        val context = buildString {
+            append("[PLANNING:${_planningStep.value.name}] ")
+            append("Project plan context — step: ${_planningStep.value.name}. ")
+            if (_projectPlan.value != null) {
+                val plan = _projectPlan.value!!
+                if (plan.name.isNotBlank()) append("Project: ${plan.name}. ")
+                if (plan.techStack.framework.isNotBlank()) append("Stack: ${plan.techStack.framework}. ")
+            }
+            append("User says: $text")
+        }
+        webSocketManager.sendAIPrompt(context)
+
+        // Advance planning steps based on conversation progress
+        advancePlanningStep(text)
+    }
+
+    fun selectPlanningOption(option: String) {
+        sendPlanningMessage(option)
+    }
+
+    private fun advancePlanningStep(userInput: String) {
+        val msgCount = _planningMessages.value.count { it.role == ChatRole.USER }
+
+        when (_planningStep.value) {
+            PlanningStep.REQUIREMENTS -> {
+                if (msgCount >= 2) {
+                    _planningStep.value = PlanningStep.TECH_STACK
+                    addPlanningMessage(ChatRole.ASSISTANT, buildString {
+                        appendLine("Great, I have a good understanding of the requirements!")
+                        appendLine()
+                        appendLine("**Step 2: Tech Stack**")
+                        appendLine()
+                        appendLine("What technologies do you prefer? I can suggest options:")
+                        appendLine()
+                        appendLine("**Frontend:**")
+                        appendLine("• React + TypeScript + Tailwind")
+                        appendLine("• Next.js + TypeScript")
+                        appendLine("• Vue 3 + TypeScript")
+                        appendLine("• Svelte + SvelteKit")
+                        appendLine()
+                        appendLine("**Backend:**")
+                        appendLine("• Node.js + Express")
+                        appendLine("• Python + FastAPI")
+                        appendLine("• Go + Gin")
+                        appendLine()
+                        appendLine("Or tell me your preferred stack!")
+                    })
+                }
+            }
+            PlanningStep.TECH_STACK -> {
+                if (msgCount >= 4) {
+                    _planningStep.value = PlanningStep.ARCHITECTURE
+                    updatePlanTechFromInput(userInput)
+                    addPlanningMessage(ChatRole.ASSISTANT, buildString {
+                        appendLine("Excellent tech choices!")
+                        appendLine()
+                        appendLine("**Step 3: Architecture**")
+                        appendLine()
+                        appendLine("Let me suggest a project structure. Any preferences for:")
+                        appendLine()
+                        appendLine("• **Patterns**: MVC, Clean Architecture, Feature-based?")
+                        appendLine("• **State management**: Redux, Zustand, Pinia?")
+                        appendLine("• **API style**: REST, GraphQL, tRPC?")
+                        appendLine("• **Database**: PostgreSQL, MongoDB, SQLite?")
+                        appendLine()
+                        appendLine("Tell me your preferences or I'll pick sensible defaults!")
+                    })
+                }
+            }
+            PlanningStep.ARCHITECTURE -> {
+                if (msgCount >= 6) {
+                    _planningStep.value = PlanningStep.FEATURES
+                    addPlanningMessage(ChatRole.ASSISTANT, buildString {
+                        appendLine("Architecture is set!")
+                        appendLine()
+                        appendLine("**Step 4: Features**")
+                        appendLine()
+                        appendLine("Let's break down the features. List the main features you need, and I'll prioritize them using MoSCoW:")
+                        appendLine()
+                        appendLine("🔴 **Must Have** — core functionality")
+                        appendLine("🟠 **Should Have** — important but not critical")
+                        appendLine("🔵 **Could Have** — nice to have")
+                        appendLine("⚪ **Won't Have** — out of scope for now")
+                        appendLine()
+                        appendLine("What features do you need?")
+                    })
+                }
+            }
+            PlanningStep.FEATURES -> {
+                if (msgCount >= 8) {
+                    _planningStep.value = PlanningStep.MILESTONES
+                    addPlanningMessage(ChatRole.ASSISTANT, buildString {
+                        appendLine("Great feature list!")
+                        appendLine()
+                        appendLine("**Step 5: Milestones & Phases**")
+                        appendLine()
+                        appendLine("I'll organize the features into development phases:")
+                        appendLine()
+                        appendLine("**Phase 1 — MVP (Foundation)**")
+                        appendLine("Project setup, core features, basic UI")
+                        appendLine()
+                        appendLine("**Phase 2 — Core Features**")
+                        appendLine("Main functionality, API integration")
+                        appendLine()
+                        appendLine("**Phase 3 — Polish**")
+                        appendLine("Testing, optimization, nice-to-have features")
+                        appendLine()
+                        appendLine("Does this phasing work? Want to adjust anything?")
+                    })
+                }
+            }
+            PlanningStep.MILESTONES -> {
+                if (msgCount >= 10) {
+                    _planningStep.value = PlanningStep.REVIEW
+                    addPlanningMessage(ChatRole.ASSISTANT, buildString {
+                        appendLine("**Step 6: Review**")
+                        appendLine()
+                        appendLine("Here's your project plan summary. Review and confirm:")
+                        appendLine()
+                        appendLine("Say **\"confirm\"** to finalize and start building, or tell me what to change!")
+                    })
+                }
+            }
+            PlanningStep.REVIEW -> {
+                val lower = userInput.lowercase()
+                if (lower.contains("confirm") || lower.contains("go") || lower.contains("start") ||
+                    lower.contains("подтверждаю") || lower.contains("начинай") || lower.contains("ок")) {
+                    finalizePlan()
+                }
+            }
+            else -> {}
+        }
+    }
+
+    private fun updatePlanTechFromInput(input: String) {
+        val lower = input.lowercase()
+        val currentPlan = _projectPlan.value ?: ProjectPlan(id = UUID.randomUUID().toString())
+        val tech = currentPlan.techStack.copy(
+            language = when {
+                lower.contains("typescript") || lower.contains("ts") -> "TypeScript"
+                lower.contains("javascript") || lower.contains("js") -> "JavaScript"
+                lower.contains("python") -> "Python"
+                lower.contains("go") || lower.contains("golang") -> "Go"
+                lower.contains("rust") -> "Rust"
+                lower.contains("kotlin") -> "Kotlin"
+                else -> currentPlan.techStack.language
+            },
+            framework = when {
+                lower.contains("next") -> "Next.js"
+                lower.contains("react") -> "React"
+                lower.contains("vue") -> "Vue 3"
+                lower.contains("svelte") -> "SvelteKit"
+                lower.contains("angular") -> "Angular"
+                lower.contains("express") -> "Express"
+                lower.contains("fastapi") -> "FastAPI"
+                lower.contains("django") -> "Django"
+                lower.contains("gin") -> "Gin"
+                else -> currentPlan.techStack.framework
+            }
+        )
+        _projectPlan.value = currentPlan.copy(techStack = tech, updatedAt = System.currentTimeMillis())
+    }
+
+    private fun finalizePlan() {
+        _planningStep.value = PlanningStep.ACTIVE
+
+        val plan = _projectPlan.value ?: ProjectPlan(id = UUID.randomUUID().toString())
+        val finalPlan = plan.copy(
+            name = plan.name.ifBlank { "My Project" },
+            isActive = true,
+            phases = if (plan.phases.isEmpty()) listOf(
+                ProjectPhase("p1", "MVP Foundation", "Project setup and core features", 0),
+                ProjectPhase("p2", "Core Features", "Main functionality implementation", 1),
+                ProjectPhase("p3", "Polish & Deploy", "Testing, optimization, deployment", 2),
+            ) else plan.phases,
+            features = if (plan.features.isEmpty()) listOf(
+                Feature("f1", "Project setup & configuration", "Initialize project with boilerplate", "p1", Priority.MUST, FeatureStatus.TODO,
+                    listOf(Subtask("s1", "Initialize repository"), Subtask("s2", "Configure linting"), Subtask("s3", "Setup CI/CD"))),
+                Feature("f2", "Core UI layout", "Main app layout and navigation", "p1", Priority.MUST),
+                Feature("f3", "Authentication", "User login/register flow", "p1", Priority.MUST,
+                    subtasks = listOf(Subtask("s4", "Login page"), Subtask("s5", "Register page"), Subtask("s6", "Auth middleware"))),
+                Feature("f4", "Database schema", "Design and implement data models", "p1", Priority.MUST),
+                Feature("f5", "API endpoints", "REST/GraphQL API implementation", "p2", Priority.MUST),
+                Feature("f6", "Business logic", "Core application logic", "p2", Priority.MUST),
+                Feature("f7", "Search & filtering", "Search functionality", "p2", Priority.SHOULD),
+                Feature("f8", "Responsive design", "Mobile-friendly layouts", "p2", Priority.SHOULD),
+                Feature("f9", "Unit tests", "Test core functionality", "p3", Priority.MUST),
+                Feature("f10", "Performance optimization", "Bundle analysis, lazy loading", "p3", Priority.SHOULD),
+                Feature("f11", "Documentation", "README, API docs", "p3", Priority.COULD),
+                Feature("f12", "Deployment setup", "Production deployment config", "p3", Priority.MUST),
+            ) else plan.features,
+            updatedAt = System.currentTimeMillis()
+        )
+        _projectPlan.value = finalPlan
+
+        addPlanningMessage(ChatRole.ASSISTANT, buildString {
+            appendLine("✅ **Plan finalized!**")
+            appendLine()
+            appendLine("Your project plan is now active with ${finalPlan.features.size} features across ${finalPlan.phases.size} phases.")
+            appendLine()
+            appendLine("You can track progress in the Project Plan sidebar. Let's start building!")
+            appendLine()
+            appendLine("💡 Tip: Use voice commands like **\"show plan\"** or **\"next task\"** anytime.")
+        })
+
+        // Send plan to server for context
+        webSocketManager.sendAIPrompt("[PLAN_FINALIZED] ${gson.toJson(finalPlan)}")
+    }
+
+    fun toggleFeatureStatus(featureId: String) {
+        val plan = _projectPlan.value ?: return
+        val features = plan.features.toMutableList()
+        val idx = features.indexOfFirst { it.id == featureId }
+        if (idx >= 0) {
+            val f = features[idx]
+            val newStatus = when (f.status) {
+                FeatureStatus.TODO -> FeatureStatus.IN_PROGRESS
+                FeatureStatus.IN_PROGRESS -> FeatureStatus.DONE
+                FeatureStatus.DONE -> FeatureStatus.TODO
+                else -> FeatureStatus.IN_PROGRESS
+            }
+            features[idx] = f.copy(status = newStatus)
+            _projectPlan.value = plan.copy(features = features, updatedAt = System.currentTimeMillis())
+        }
+    }
+
+    fun toggleSubtask(featureId: String, subtaskId: String) {
+        val plan = _projectPlan.value ?: return
+        val features = plan.features.toMutableList()
+        val fIdx = features.indexOfFirst { it.id == featureId }
+        if (fIdx >= 0) {
+            val f = features[fIdx]
+            val subtasks = f.subtasks.toMutableList()
+            val sIdx = subtasks.indexOfFirst { it.id == subtaskId }
+            if (sIdx >= 0) {
+                subtasks[sIdx] = subtasks[sIdx].copy(isDone = !subtasks[sIdx].isDone)
+                features[fIdx] = f.copy(subtasks = subtasks)
+                _projectPlan.value = plan.copy(features = features, updatedAt = System.currentTimeMillis())
+            }
+        }
+    }
+
+    private fun addPlanningMessage(role: ChatRole, content: String) {
+        val msgs = _planningMessages.value.toMutableList()
+        msgs.add(ChatMessage(id = UUID.randomUUID().toString(), role = role, content = content))
+        _planningMessages.value = msgs
     }
 
     override fun onCleared() {

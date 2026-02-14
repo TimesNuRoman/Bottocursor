@@ -98,6 +98,15 @@ fun ActivityBar(
             tintActive = CursorPrimary
         )
 
+        // Project Plan
+        ActivityBarIcon(
+            icon = Icons.Outlined.RocketLaunch,
+            label = "Project Plan",
+            isActive = activePanel == SidebarPanel.PROJECT_PLAN && sidebarVisible,
+            onClick = { onPanelSelect(SidebarPanel.PROJECT_PLAN) },
+            tintActive = CursorTertiary
+        )
+
         Spacer(Modifier.weight(1f))
 
         // Voice button

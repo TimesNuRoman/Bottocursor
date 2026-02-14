@@ -44,10 +44,20 @@ fun CursorSidebar(
     fileTree: List<FileNode>,
     chatMessages: List<ChatMessage>,
     voiceState: VoiceState,
+    // Planning props
+    projectPlan: com.cursorai.remote.data.model.ProjectPlan? = null,
+    planningStep: com.cursorai.remote.data.model.PlanningStep = com.cursorai.remote.data.model.PlanningStep.WELCOME,
+    planningMessages: List<ChatMessage> = emptyList(),
     onFileSelect: (String) -> Unit,
     onRefresh: () -> Unit,
     onSendChat: (String) -> Unit,
     onVoiceInput: () -> Unit,
+    // Planning callbacks
+    onSendPlanningMessage: (String) -> Unit = {},
+    onSelectPlanningOption: (String) -> Unit = {},
+    onStartPlanning: () -> Unit = {},
+    onFeatureToggle: (String) -> Unit = {},
+    onSubtaskToggle: (String, String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -64,6 +74,18 @@ fun CursorSidebar(
                     .background(SideBarBg)
             ) {
                 when (activePanel) {
+                    SidebarPanel.PROJECT_PLAN -> ProjectPlanSidePanel(
+                        plan = projectPlan,
+                        planningStep = planningStep,
+                        planningMessages = planningMessages,
+                        voiceState = voiceState,
+                        onSendMessage = onSendPlanningMessage,
+                        onSelectOption = onSelectPlanningOption,
+                        onStartPlanning = onStartPlanning,
+                        onFeatureToggle = onFeatureToggle,
+                        onSubtaskToggle = onSubtaskToggle,
+                        onVoiceInput = onVoiceInput
+                    )
                     SidebarPanel.EXPLORER -> ExplorerPanel(
                         fileTree = fileTree,
                         onFileSelect = onFileSelect,
