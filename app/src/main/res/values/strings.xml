@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Simple App</string>
+    <string name="welcome_message">Добро пожаловать в простое приложение!</string>
+    <string name="click_count">Нажатий: %d</string>
+    <string name="click_count_default">Нажатий: 0</string>
+    <string name="button_click">Нажми меня!</string>
+    <string name="button_reset">Сбросить</string>
+    <string name="counter_reset">Счётчик сброшен</string>
+    <string name="milestone_message">Отлично! %d нажатий!</string>
+    <string name="footer_text">Сделано с ❤️ на Android</string>
+</resources>
