@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Счётчик</string>
+    <string name="app_title">Простой счётчик</string>
+    <string name="tap_buttons">Нажимайте кнопки для счёта</string>
+    <string name="plus">+</string>
+    <string name="minus">−</string>
+    <string name="reset_icon">↺</string>
+</resources>
