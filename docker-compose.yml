@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: telegram-ai-bot
+    env_file: .env
+    restart: unless-stopped
+    depends_on:
+      - db
+      - redis
+    networks:
+      - bot-network
+    volumes:
+      - ./bot.db:/app/bot.db
+
+  db:
+    image: postgres:15-alpine
+    container_name: telegram-ai-db
+    environment:
+      POSTGRES_USER: bot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
+      POSTGRES_DB: telegram_bot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bot -d telegram_bot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: telegram-ai-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  bot-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
