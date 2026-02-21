@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="thumbGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFDC5D"/>
+      <stop offset="100%" style="stop-color:#F5CA3B"/>
+    </linearGradient>
+    <filter id="thumbShadow">
+      <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#00000025"/>
+    </filter>
+  </defs>
+  <g filter="url(#thumbShadow)">
+    <!-- Hand base -->
+    <rect x="45" y="100" width="45" height="70" rx="10" fill="url(#thumbGradient)"/>
+    <!-- Thumb up -->
+    <path d="M90 100 L90 65 Q90 45 110 45 L130 45 Q145 45 145 60 L145 100 L90 100" fill="url(#thumbGradient)"/>
+    <!-- Fingers -->
+    <rect x="90" y="100" width="60" height="15" rx="5" fill="url(#thumbGradient)"/>
+    <rect x="90" y="118" width="55" height="15" rx="5" fill="url(#thumbGradient)"/>
+    <rect x="90" y="136" width="50" height="15" rx="5" fill="url(#thumbGradient)"/>
+    <rect x="90" y="154" width="45" height="15" rx="5" fill="url(#thumbGradient)"/>
+  </g>
+</svg>

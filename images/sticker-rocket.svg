@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="rocketBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8E8E8"/>
+      <stop offset="100%" style="stop-color:#CCCCCC"/>
+    </linearGradient>
+    <linearGradient id="rocketFire" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B35"/>
+      <stop offset="50%" style="stop-color:#F7931E"/>
+      <stop offset="100%" style="stop-color:#FFD700"/>
+    </linearGradient>
+    <filter id="rocketShadow">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-color="#00000025"/>
+    </filter>
+  </defs>
+  <g filter="url(#rocketShadow)">
+    <!-- Fire -->
+    <path d="M85 150 Q100 180 115 150 Q100 170 85 150" fill="url(#rocketFire)"/>
+    <!-- Body -->
+    <path d="M70 140 L70 80 Q100 30 130 80 L130 140 Z" fill="url(#rocketBody)"/>
+    <!-- Window -->
+    <circle cx="100" cy="90" r="18" fill="#37AEE2"/>
+    <circle cx="100" cy="90" r="12" fill="#87CEEB"/>
+    <!-- Fins -->
+    <path d="M70 140 L50 160 L70 120 Z" fill="#E74C3C"/>
+    <path d="M130 140 L150 160 L130 120 Z" fill="#E74C3C"/>
+    <!-- Nose -->
+    <ellipse cx="100" cy="55" rx="8" ry="4" fill="#E74C3C"/>
+  </g>
+</svg>
