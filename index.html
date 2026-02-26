@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hello world</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, Helvetica, sans-serif;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #6dd5ed, #2193b0);
+    }
+
+    .card {
+      width: min(90vw, 560px);
+      padding: 2rem;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #1a1a1a;
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2);
+      text-align: center;
+    }
+
+    h1 {
+      margin-top: 0;
+      margin-bottom: 0.75rem;
+      font-size: clamp(2rem, 6vw, 3rem);
+    }
+
+    p {
+      margin: 0;
+      font-size: 1.05rem;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Hello world!</h1>
+    <p>This is a tiny website page ready to deploy.</p>
+  </main>
+</body>
+</html>
